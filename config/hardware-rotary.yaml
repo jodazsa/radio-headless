@@ -1,0 +1,41 @@
+i2c:
+  # Volume encoder still uses Seesaw I2C breakout
+  volume_i2c_address: 0x49
+
+switches:
+  # Station selector switch (BCD rotary, 10 positions)
+  # Reads binary pattern from 4 GPIO pins
+  station_switch:
+    bit0: 10  # GPIO 10 (value 1)
+    bit1: 9   # GPIO 9  (value 2)
+    bit2: 22  # GPIO 22 (value 4)
+    bit3: 17  # GPIO 17 (value 8)
+  
+  # Bank selector switch (BCD rotary, 10 positions)
+  bank_switch:
+    bit0: 5   # GPIO 5  (value 1)
+    bit1: 6   # GPIO 6  (value 2)
+    bit2: 13  # GPIO 13 (value 4)
+    bit3: 11  # GPIO 11 (value 8)
+
+encoders:
+  volume_encoder: 0  # Only one encoder for volume
+
+controls:
+  bank_min: 0
+  bank_max: 9
+  station_min: 0
+  station_max: 9
+  volume_min: 0
+  volume_max: 100
+  volume_step: 2
+
+buttons:
+  volume_button: "play_pause"  # Volume encoder push button
+
+polling:
+  # How often to check switch positions (seconds)
+  switch_poll_interval: 0.1
+  
+  # Debounce: ignore changes faster than this (seconds)
+  switch_debounce: 0.05

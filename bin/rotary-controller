@@ -1,0 +1,318 @@
+#!/usr/bin/env python3
+"""Rotary switch controller for radio-voice project.
+
+Reads BCD rotary switches for bank/station selection and a single
+encoder for volume control. No display output.
+"""
+import time
+from pathlib import Path
+
+import board
+import busio
+from adafruit_seesaw.seesaw import Seesaw
+from adafruit_seesaw.rotaryio import IncrementalEncoder
+import RPi.GPIO as GPIO
+
+from radio_lib import (
+    setup_logging,
+    parse_i2c_addr,
+    load_yaml,
+    read_state,
+    write_state,
+    sh,
+    clamp,
+    validate_hardware_config,
+    wait_for_mpd
+)
+
+# Configuration paths
+CFG_PATH = Path("/home/radio/hardware-rotary.yaml")
+STATE_PATH = Path("/home/radio/.radio-state")
+STATIONS_PATH = Path("/home/radio/stations.yaml")
+
+# Hardware configuration
+BUTTON_PIN = 9  # Seesaw GPIO for volume encoder button
+MAX_JUMP = 8    # Max encoder delta per poll (glitch filter)
+I2C_ERR_BACKOFF = 0.2  # Seconds to wait after I2C error
+
+# Setup logging
+logger = setup_logging('rotary-controller', Path('/home/radio/logs/rotary.log'))
+
+
+def read_bcd_switch(pins: dict) -> int:
+    """Read a 4-bit BCD value from GPIO pins.
+    
+    Args:
+        pins: Dict with keys bit0, bit1, bit2, bit3 (GPIO pin numbers)
+        
+    Returns:
+        Integer 0-15 (though switches only use 0-9)
+    """
+    bit0 = GPIO.input(pins['bit0'])
+    bit1 = GPIO.input(pins['bit1'])
+    bit2 = GPIO.input(pins['bit2'])
+    bit3 = GPIO.input(pins['bit3'])
+    
+    # Convert binary to decimal
+    # Active LOW: if pin reads 0, bit is SET
+    value = 0
+    if bit0 == GPIO.LOW:
+        value += 1
+    if bit1 == GPIO.LOW:
+        value += 2
+    if bit2 == GPIO.LOW:
+        value += 4
+    if bit3 == GPIO.LOW:
+        value += 8
+    
+    return value
+
+
+def stations_exist(bank: int, station: int) -> bool:
+    """Check if a bank/station combination exists in stations.yaml."""
+    data = load_yaml(STATIONS_PATH)
+    banks = data.get("banks", {})
+    b = banks.get(bank)
+    if not isinstance(b, dict):
+        return False
+    s = b.get("stations", {})
+    return isinstance(s, dict) and station in s
+
+
+def main():
+    """Main rotary controller loop."""
+    logger.info("=" * 50)
+    logger.info("Rotary Switch Controller Starting")
+    logger.info("=" * 50)
+    
+    # Load and validate configuration
+    if not CFG_PATH.exists():
+        logger.error(f"Configuration file not found: {CFG_PATH}")
+        raise SystemExit(1)
+    
+    cfg = load_yaml(CFG_PATH)
+    
+    # Extract configuration
+    i2c_cfg = cfg.get("i2c", {})
+    switch_cfg = cfg.get("switches", {})
+    enc_cfg = cfg.get("encoders", {})
+    ctl = cfg.get("controls", {})
+    btn_cfg = cfg.get("buttons", {})
+    poll_cfg = cfg.get("polling", {})
+    
+    addr = parse_i2c_addr(i2c_cfg.get("volume_i2c_address", "0x49"))
+    logger.info(f"Volume encoder I2C address: 0x{addr:02x}")
+    
+    # GPIO pin mappings
+    station_pins = switch_cfg.get("station_switch", {})
+    bank_pins = switch_cfg.get("bank_switch", {})
+    
+    # Encoder indices
+    vol_idx = int(enc_cfg.get("volume_encoder", 0))
+    
+    # Control ranges
+    bank_min = int(ctl.get("bank_min", 0))
+    bank_max = int(ctl.get("bank_max", 9))
+    st_min = int(ctl.get("station_min", 0))
+    st_max = int(ctl.get("station_max", 9))
+    vmin = int(ctl.get("volume_min", 0))
+    vmax = int(ctl.get("volume_max", 100))
+    vstep = int(ctl.get("volume_step", 2))
+    
+    # Polling configuration
+    poll_interval = float(poll_cfg.get("switch_poll_interval", 0.1))
+    debounce_time = float(poll_cfg.get("switch_debounce", 0.05))
+    
+    logger.info(f"Bank range: {bank_min}-{bank_max}")
+    logger.info(f"Station range: {st_min}-{st_max}")
+    logger.info(f"Volume range: {vmin}-{vmax}, step: {vstep}")
+    logger.info(f"Poll interval: {poll_interval}s, debounce: {debounce_time}s")
+    
+    # Wait for MPD to be ready
+    if not wait_for_mpd(logger=logger):
+        raise SystemExit("MPD not available")
+    
+    # Setup GPIO
+    logger.info("Initializing GPIO...")
+    GPIO.setmode(GPIO.BCM)
+    GPIO.setwarnings(False)
+    
+    # Configure all switch pins as inputs with pull-up resistors
+    all_pins = [
+        station_pins['bit0'], station_pins['bit1'], 
+        station_pins['bit2'], station_pins['bit3'],
+        bank_pins['bit0'], bank_pins['bit1'],
+        bank_pins['bit2'], bank_pins['bit3']
+    ]
+    
+    for pin in all_pins:
+        GPIO.setup(pin, GPIO.IN, pull_up_down=GPIO.PUD_UP)
+    
+    logger.info(f"Station switch GPIOs: {station_pins}")
+    logger.info(f"Bank switch GPIOs: {bank_pins}")
+    
+    # Initialize I2C and Seesaw for volume encoder
+    logger.info("Initializing I2C for volume encoder...")
+    try:
+        i2c = busio.I2C(board.SCL, board.SDA)
+        ss = Seesaw(i2c, addr=addr)
+        logger.info("I2C initialized successfully")
+    except Exception as e:
+        logger.error(f"Failed to initialize I2C: {e}")
+        raise SystemExit(1)
+    
+    # Configure volume encoder button
+    ss.pin_mode(BUTTON_PIN, ss.INPUT_PULLUP)
+    
+    # Initialize volume encoder
+    vol_enc = IncrementalEncoder(ss, vol_idx)
+    last_vol_pos = vol_enc.position
+    last_btn = ss.digital_read(BUTTON_PIN)
+    
+    # Load initial state
+    st = read_state(STATE_PATH)
+    last_volume = int(st.get("last_volume", "60"))
+    
+    # Track restart count
+    restart_count = int(st.get("rotary_restarts", "0")) + 1
+    
+    # Read initial switch positions
+    cur_bank = clamp(read_bcd_switch(bank_pins), bank_min, bank_max)
+    cur_station = clamp(read_bcd_switch(station_pins), st_min, st_max)
+    
+    write_state(
+        STATE_PATH,
+        current_bank=cur_bank,
+        current_station=cur_station,
+        last_volume=last_volume,
+        rotary_restarts=restart_count
+    )
+    
+    logger.info(f"Initial state: Bank {cur_bank}, Station {cur_station}, Volume {last_volume}")
+    logger.info(f"Restart count: {restart_count}")
+    
+    # Track mute state
+    muted = False
+    
+    # Debounce tracking
+    last_switch_change = 0.0
+    
+    logger.info("Entering main loop")
+    
+    # Main event loop
+    while True:
+        try:
+            # Read current switch positions
+            bank = clamp(read_bcd_switch(bank_pins), bank_min, bank_max)
+            station = clamp(read_bcd_switch(station_pins), st_min, st_max)
+            
+            # Check if switches changed (with debouncing)
+            if (bank != cur_bank or station != cur_station):
+                now = time.monotonic()
+                
+                # Debounce: ignore rapid changes
+                if now - last_switch_change < debounce_time:
+                    time.sleep(debounce_time)
+                    continue
+                
+                last_switch_change = now
+                
+                # Log the change
+                if bank != cur_bank:
+                    logger.info(f"Bank switch changed: {cur_bank} → {bank}")
+                if station != cur_station:
+                    logger.info(f"Station switch changed: {cur_station} → {station}")
+                
+                cur_bank = bank
+                cur_station = station
+                
+                # Save state
+                write_state(STATE_PATH, current_bank=cur_bank, current_station=cur_station)
+                
+                # Play the new station immediately (no settle delay needed)
+                if stations_exist(cur_bank, cur_station):
+                    logger.info(f"Playing: Bank {cur_bank}, Station {cur_station}")
+                    sh(["radio-play", str(cur_bank), str(cur_station)])
+                else:
+                    logger.warning(f"Station does not exist: Bank {cur_bank}, Station {cur_station}")
+            
+            # Handle volume encoder with I2C error handling
+            try:
+                vol_pos = vol_enc.position
+            except OSError as err:
+                logger.warning(f"I2C error reading encoder: {err}")
+                vol_pos = last_vol_pos
+                time.sleep(I2C_ERR_BACKOFF)
+            
+            # Glitch filter: ignore large jumps
+            if abs(vol_pos - last_vol_pos) > MAX_JUMP:
+                logger.debug(f"Volume encoder glitch filtered: {vol_pos} → {last_vol_pos}")
+                vol_pos = last_vol_pos
+            
+            # Handle volume change
+            if vol_pos != last_vol_pos:
+                delta = vol_pos - last_vol_pos
+                last_vol_pos = vol_pos
+                
+                # Get current MPD volume
+                r = sh(["mpc", "status"])
+                vol = last_volume
+                for line in r.stdout.splitlines():
+                    if line.startswith("volume:"):
+                        try:
+                            vol = int(line.split()[1].strip("%"))
+                        except Exception:
+                            pass
+                
+                if muted:
+                    # When muted, track volume changes but don't apply to MPD
+                    last_volume = clamp(last_volume + delta * vstep, vmin, vmax)
+                    logger.debug(f"Volume change while muted: {last_volume}")
+                else:
+                    vol = clamp(vol + delta * vstep, vmin, vmax)
+                    last_volume = vol
+                    sh(["mpc", "volume", str(vol)])
+                    write_state(STATE_PATH, last_volume=vol)
+                    logger.debug(f"Volume: {vol}")
+            
+            # Handle button press
+            btn = ss.digital_read(BUTTON_PIN)
+            if last_btn == 1 and btn == 0:  # Falling edge (button pressed)
+                action = btn_cfg.get("volume_button", "noop")
+                logger.info(f"Volume button pressed, action: {action}")
+                
+                if action == "play_pause":
+                    sh(["mpc", "toggle"])
+                elif action == "mute_toggle":
+                    if not muted:
+                        muted = True
+                        sh(["mpc", "volume", "0"])
+                        logger.info("Muted")
+                    else:
+                        muted = False
+                        sh(["mpc", "volume", str(last_volume)])
+                        logger.info(f"Unmuted, volume: {last_volume}")
+            
+            last_btn = btn
+            
+            # Sleep until next poll
+            time.sleep(poll_interval)
+        
+        except OSError as e:
+            # Transient I2C errors
+            logger.error(f"I2C error in main loop: {e}")
+            time.sleep(0.2)
+        except KeyboardInterrupt:
+            logger.info("Shutting down (KeyboardInterrupt)")
+            GPIO.cleanup()
+            break
+        except Exception as e:
+            logger.error(f"Unexpected error: {e}", exc_info=True)
+            time.sleep(1.0)
+
+
+if __name__ == "__main__":
+    try:
+        main()
+    finally:
+        GPIO.cleanup()

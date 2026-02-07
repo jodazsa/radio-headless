@@ -1,0 +1,14 @@
+[Unit]
+Description=Radio Rotary Switch Controller
+After=mpd.service network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=radio
+ExecStart=/usr/bin/python3 /usr/local/bin/rotary-controller
+Restart=always
+RestartSec=1
+
+[Install]
+WantedBy=multi-user.target
