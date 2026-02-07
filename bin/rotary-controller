@@ -22,7 +22,8 @@ from radio_lib import (
     write_state,
     sh,
     clamp,
-    wait_for_mpd
+    wait_for_mpd,
+    validate_hardware_config
 )
 
 # Configuration paths
@@ -148,7 +149,14 @@ def main():
         raise SystemExit(1)
     
     cfg = load_yaml(CFG_PATH)
-    
+
+    validation_errors = validate_hardware_config(cfg, variant="rotary")
+    if validation_errors:
+        logger.error("Invalid configuration. Please fix /home/radio/hardware-rotary.yaml:")
+        for err in validation_errors:
+            logger.error(f"  - {err}")
+        raise SystemExit(1)
+
     # Extract configuration
     i2c_cfg = cfg.get("i2c", {})
     switch_cfg = cfg.get("switches", {})

@@ -1,0 +1,75 @@
+#!/usr/bin/env python3
+"""Tiny config smoke test for local repo files.
+
+Validates YAML parsing and basic structure for rotary hardware and stations
+configuration files.
+"""
+from pathlib import Path
+import sys
+
+from radio_lib import load_yaml, validate_hardware_config, validate_stations_config
+
+ROOT = Path(__file__).resolve().parents[1]
+HARDWARE = ROOT / "config" / "hardware-rotary.yaml"
+STATIONS = ROOT / "config" / "stations.yaml"
+
+
+def main() -> int:
+    errors = []
+
+    for path in (HARDWARE, STATIONS):
+        if not path.exists():
+            errors.append(f"Missing file: {path}")
+
+    if errors:
+        for err in errors:
+            print(f"ERROR: {err}")
+        return 1
+
+    try:
+        hw_cfg = load_yaml(HARDWARE)
+    except Exception as err:
+        print(f"ERROR: Failed to parse {HARDWARE}: {err}")
+        return 1
+
+    hw_errors = validate_hardware_config(hw_cfg, variant="rotary")
+    if hw_errors:
+        for err in hw_errors:
+            print(f"ERROR: hardware-rotary.yaml: {err}")
+        return 1
+
+    try:
+        stations_cfg = load_yaml(STATIONS)
+    except Exception as err:
+        print(f"ERROR: Failed to parse {STATIONS}: {err}")
+        return 1
+
+    station_errors = validate_stations_config(stations_cfg)
+    if station_errors:
+        for err in station_errors:
+            print(f"ERROR: stations.yaml: {err}")
+        return 1
+
+    banks = stations_cfg.get("banks", {})
+    station_count = 0
+    for bank_id, bank in banks.items():
+        stations = bank.get("stations", {})
+        station_count += len(stations)
+        for station_id, station in stations.items():
+            if not isinstance(station, dict):
+                print(f"ERROR: banks.{bank_id}.stations.{station_id} must be a mapping")
+                return 1
+            stype = station.get("type")
+            if not isinstance(stype, str) or not stype.strip():
+                print(f"ERROR: banks.{bank_id}.stations.{station_id} missing non-empty type")
+                return 1
+
+    print(
+        f"OK: parsed {HARDWARE.name} and {STATIONS.name}; "
+        f"validated {len(banks)} bank(s), {station_count} station(s)"
+    )
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

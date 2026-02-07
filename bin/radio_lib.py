@@ -9,7 +9,7 @@ import subprocess
 import yaml
 from mpd import MPDClient
 from pathlib import Path
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, List
 
 
 def setup_logging(name: str, log_file: Optional[Path] = None) -> logging.Logger:
@@ -198,27 +198,30 @@ def clamp(n: float, lo: float, hi: float) -> float:
     return lo if n < lo else hi if n > hi else n
 
 
-def validate_hardware_config(cfg: Dict[str, Any]) -> list:
-    """Validate hardware configuration and return list of errors.
-    
+def validate_hardware_config(cfg: Dict[str, Any], variant: str = "encoder_oled") -> list:
+    """Validate hardware configuration for a specific hardware variant.
+
     Args:
         cfg: Hardware config dictionary
-        
+        variant: Hardware variant ("encoder_oled" or "rotary")
+
     Returns:
         List of error messages (empty if valid)
-        
-    Example:
-        errors = validate_hardware_config(cfg)
-        if errors:
-            for err in errors:
-                print(f"Config error: {err}")
     """
-    errors = []
+    if variant == "encoder_oled":
+        return _validate_encoder_oled_config(cfg)
+    if variant == "rotary":
+        return _validate_rotary_config(cfg)
+    return [f"Unknown hardware variant: {variant}"]
+
+
+def _validate_encoder_oled_config(cfg: Dict[str, Any]) -> List[str]:
+    """Validate legacy encoder + OLED configuration."""
+    errors: List[str] = []
 
     if not isinstance(cfg, dict):
         return ["Hardware config must be a dictionary"]
-    
-    # Check required sections exist
+
     if "i2c" not in cfg:
         errors.append("Missing 'i2c' section")
     else:
@@ -227,28 +230,118 @@ def validate_hardware_config(cfg: Dict[str, Any]) -> list:
             errors.append("Missing i2c.encoder_i2c_address")
         if "oled_i2c_address" not in i2c:
             errors.append("Missing i2c.oled_i2c_address")
-    
+
     if "encoders" not in cfg:
         errors.append("Missing 'encoders' section")
-    
+
     if "controls" not in cfg:
         errors.append("Missing 'controls' section")
     else:
         ctl = cfg["controls"]
-        required = ["bank_min", "bank_max", "station_min", "station_max", 
+        required = ["bank_min", "bank_max", "station_min", "station_max",
                     "volume_min", "volume_max", "volume_step"]
         for key in required:
             if key not in ctl:
                 errors.append(f"Missing controls.{key}")
-    
+
     if "buttons" not in cfg:
         errors.append("Missing 'buttons' section")
-    
+
     if "display" not in cfg:
         errors.append("Missing 'display' section")
-    
+
     return errors
 
+
+def _validate_rotary_config(cfg: Dict[str, Any]) -> List[str]:
+    """Validate rotary-switch variant configuration."""
+    errors: List[str] = []
+
+    if not isinstance(cfg, dict):
+        return ["Hardware config must be a dictionary"]
+
+    i2c = cfg.get("i2c")
+    if not isinstance(i2c, dict):
+        errors.append("Missing or invalid 'i2c' section (must be a mapping)")
+    else:
+        addr = i2c.get("volume_i2c_address")
+        if addr is None:
+            errors.append("Missing i2c.volume_i2c_address")
+        else:
+            try:
+                parse_i2c_addr(addr)
+            except Exception as err:
+                errors.append(f"Invalid i2c.volume_i2c_address ({addr!r}): {err}")
+
+    switches = cfg.get("switches")
+    if not isinstance(switches, dict):
+        errors.append("Missing or invalid 'switches' section (must be a mapping)")
+    else:
+        for sw_name in ("station_switch", "bank_switch"):
+            sw = switches.get(sw_name)
+            if not isinstance(sw, dict):
+                errors.append(f"Missing or invalid switches.{sw_name} (must be a mapping)")
+                continue
+            for bit in ("bit0", "bit1", "bit2", "bit3"):
+                pin = sw.get(bit)
+                if not isinstance(pin, int):
+                    errors.append(f"switches.{sw_name}.{bit} must be an integer GPIO pin")
+
+    encoders = cfg.get("encoders")
+    if not isinstance(encoders, dict):
+        errors.append("Missing or invalid 'encoders' section (must be a mapping)")
+    elif not isinstance(encoders.get("volume_encoder"), int):
+        errors.append("encoders.volume_encoder must be an integer")
+
+    controls = cfg.get("controls")
+    if not isinstance(controls, dict):
+        errors.append("Missing or invalid 'controls' section (must be a mapping)")
+    else:
+        required_ints = ["bank_min", "bank_max", "station_min", "station_max", "volume_min", "volume_max", "volume_step"]
+        for key in required_ints:
+            if not isinstance(controls.get(key), int):
+                errors.append(f"controls.{key} must be an integer")
+
+        if all(isinstance(controls.get(k), int) for k in ("bank_min", "bank_max")):
+            if controls["bank_min"] > controls["bank_max"]:
+                errors.append("controls.bank_min must be <= controls.bank_max")
+
+        if all(isinstance(controls.get(k), int) for k in ("station_min", "station_max")):
+            if controls["station_min"] > controls["station_max"]:
+                errors.append("controls.station_min must be <= controls.station_max")
+
+        if all(isinstance(controls.get(k), int) for k in ("volume_min", "volume_max")):
+            if controls["volume_min"] > controls["volume_max"]:
+                errors.append("controls.volume_min must be <= controls.volume_max")
+
+        if isinstance(controls.get("volume_step"), int) and controls["volume_step"] <= 0:
+            errors.append("controls.volume_step must be > 0")
+
+    buttons = cfg.get("buttons")
+    if not isinstance(buttons, dict):
+        errors.append("Missing or invalid 'buttons' section (must be a mapping)")
+    else:
+        action = buttons.get("volume_button")
+        allowed_actions = {"play_pause", "mute_toggle", "noop"}
+        if not isinstance(action, str) or action not in allowed_actions:
+            errors.append(
+                "buttons.volume_button must be one of: play_pause, mute_toggle, noop"
+            )
+
+    polling = cfg.get("polling")
+    if not isinstance(polling, dict):
+        errors.append("Missing or invalid 'polling' section (must be a mapping)")
+    else:
+        poll_interval = polling.get("switch_poll_interval")
+        debounce = polling.get("switch_debounce")
+
+        if not isinstance(poll_interval, (int, float)) or poll_interval <= 0:
+            errors.append("polling.switch_poll_interval must be a number > 0")
+
+        if not isinstance(debounce, (int, float)) or debounce < 0:
+            errors.append("polling.switch_debounce must be a number >= 0")
+
+    return errors
 
 def validate_stations_config(cfg: Dict[str, Any]) -> list:
     """Validate stations configuration and return list of errors.
