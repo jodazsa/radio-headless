@@ -213,6 +213,9 @@ def validate_hardware_config(cfg: Dict[str, Any]) -> list:
                 print(f"Config error: {err}")
     """
     errors = []
+
+    if not isinstance(cfg, dict):
+        return ["Hardware config must be a dictionary"]
     
     # Check required sections exist
     if "i2c" not in cfg:
@@ -256,6 +259,9 @@ def validate_stations_config(cfg: Dict[str, Any]) -> list:
         List of error messages (empty if valid)
     """
     errors = []
+
+    if not isinstance(cfg, dict):
+        return ["Stations config must be a dictionary"]
     
     if "banks" not in cfg:
         errors.append("Missing 'banks' section")
