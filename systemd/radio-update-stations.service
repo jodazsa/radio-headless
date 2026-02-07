@@ -1,0 +1,17 @@
+[Unit]
+Description=Radio Stations Auto-Update
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=radio
+ExecStart=/usr/bin/python3 /usr/local/bin/update-stations
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=update-stations
+
+[Install]
+WantedBy=multi-user.target

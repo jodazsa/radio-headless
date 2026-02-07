@@ -39,3 +39,9 @@ polling:
   
   # Debounce: ignore changes faster than this (seconds)
   switch_debounce: 0.05
+
+auto_update:
+  # Automatically update stations.yaml from GitHub
+  enabled: true
+  github_url: "https://raw.githubusercontent.com/jodazsa/radio/refs/heads/main/config/stations.yaml"
+  local_path: "/home/radio/stations.yaml"

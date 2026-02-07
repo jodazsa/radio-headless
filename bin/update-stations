@@ -1,0 +1,246 @@
+#!/usr/bin/env python3
+"""Auto-update stations.yaml from GitHub.
+
+This script downloads the latest stations.yaml from a configured GitHub URL,
+validates it, backs up the current version, and installs the new one.
+Designed to run via systemd timer daily at 4 AM.
+"""
+import sys
+import shutil
+import tempfile
+from pathlib import Path
+from datetime import datetime
+from typing import Dict, Any
+from urllib.request import urlopen
+from urllib.error import URLError, HTTPError
+
+# Import shared utilities
+sys.path.insert(0, '/usr/local/bin')
+from radio_lib import setup_logging, load_yaml, validate_stations_config
+
+
+def get_config() -> Dict[str, Any]:
+    """Load auto_update configuration from hardware config.
+    
+    Returns:
+        Dictionary with 'enabled', 'github_url', and 'local_path' keys
+    """
+    config_path = Path("/home/radio/hardware-rotary.yaml")
+    
+    try:
+        cfg = load_yaml(config_path)
+    except Exception as e:
+        # Return defaults if config doesn't exist or is invalid
+        return {
+            "enabled": True,
+            "github_url": "https://raw.githubusercontent.com/jodazsa/radio/refs/heads/main/config/stations.yaml",
+            "local_path": "/home/radio/stations.yaml"
+        }
+    
+    # Extract auto_update section with defaults
+    auto_update = cfg.get("auto_update", {})
+    
+    return {
+        "enabled": auto_update.get("enabled", True),
+        "github_url": auto_update.get("github_url", 
+            "https://raw.githubusercontent.com/jodazsa/radio/refs/heads/main/config/stations.yaml"),
+        "local_path": auto_update.get("local_path", "/home/radio/stations.yaml")
+    }
+
+
+def download_stations(url: str, logger) -> bytes:
+    """Download stations.yaml from GitHub URL.
+    
+    Args:
+        url: Raw GitHub URL to download from
+        logger: Logger instance
+        
+    Returns:
+        Downloaded file content as bytes
+        
+    Raises:
+        HTTPError: If download fails
+        URLError: If network error occurs
+    """
+    logger.info(f"Downloading from: {url}")
+    
+    try:
+        with urlopen(url, timeout=30) as response:
+            content = response.read()
+            logger.info(f"Downloaded {len(content)} bytes")
+            return content
+    except HTTPError as e:
+        logger.error(f"HTTP error {e.code}: {e.reason}")
+        raise
+    except URLError as e:
+        logger.error(f"Network error: {e.reason}")
+        raise
+
+
+def validate_downloaded_file(content: bytes, logger) -> Dict[str, Any]:
+    """Validate downloaded stations.yaml content.
+    
+    Args:
+        content: Downloaded YAML content as bytes
+        logger: Logger instance
+        
+    Returns:
+        Parsed YAML configuration
+        
+    Raises:
+        ValueError: If validation fails
+    """
+    import yaml
+    
+    # Parse YAML
+    try:
+        cfg = yaml.safe_load(content.decode('utf-8'))
+    except yaml.YAMLError as e:
+        logger.error(f"Invalid YAML: {e}")
+        raise ValueError(f"Downloaded file is not valid YAML: {e}")
+    
+    # Validate structure
+    errors = validate_stations_config(cfg)
+    if errors:
+        logger.error("Validation failed:")
+        for err in errors:
+            logger.error(f"  - {err}")
+        raise ValueError(f"Invalid stations config: {', '.join(errors)}")
+    
+    # Check that there's at least one bank
+    banks = cfg.get("banks", {})
+    if not banks:
+        raise ValueError("No banks found in downloaded file")
+    
+    logger.info(f"Validation passed: {len(banks)} bank(s) found")
+    return cfg
+
+
+def backup_current_file(path: Path, logger) -> None:
+    """Create timestamped backup of current stations.yaml.
+    
+    Args:
+        path: Path to current stations.yaml
+        logger: Logger instance
+    """
+    if not path.exists():
+        logger.info("No existing file to backup")
+        return
+    
+    # Create backup directory
+    backup_dir = Path("/home/radio/backups")
+    backup_dir.mkdir(parents=True, exist_ok=True)
+    
+    # Generate backup filename with timestamp
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    backup_path = backup_dir / f"stations_{timestamp}.yaml"
+    
+    # Copy current file to backup
+    shutil.copy2(path, backup_path)
+    logger.info(f"Backed up to: {backup_path}")
+    
+    # Clean up old backups (keep last 10)
+    backups = sorted(backup_dir.glob("stations_*.yaml"), reverse=True)
+    for old_backup in backups[10:]:
+        old_backup.unlink()
+        logger.info(f"Removed old backup: {old_backup.name}")
+
+
+def install_new_file(content: bytes, path: Path, logger) -> None:
+    """Install new stations.yaml file.
+    
+    Args:
+        content: New file content as bytes
+        path: Destination path
+        logger: Logger instance
+    """
+    # Write to temporary file first
+    with tempfile.NamedTemporaryFile(mode='wb', delete=False, 
+                                     suffix='.yaml', dir='/tmp') as tmp_file:
+        tmp_file.write(content)
+        tmp_path = Path(tmp_file.name)
+    
+    try:
+        # Set correct permissions (readable by all, writable by owner)
+        tmp_path.chmod(0o644)
+        
+        # Move to final location
+        shutil.move(str(tmp_path), str(path))
+        logger.info(f"Installed new file to: {path}")
+        
+        # Ensure correct ownership if running as root
+        import os
+        if os.geteuid() == 0:
+            shutil.chown(path, user='radio', group='radio')
+            logger.info("Set ownership to radio:radio")
+    finally:
+        # Clean up temp file if it still exists
+        if tmp_path.exists():
+            tmp_path.unlink()
+
+
+def main() -> int:
+    """Main entry point.
+    
+    Returns:
+        Exit code (0 for success, 1 for failure)
+    """
+    # Setup logging
+    log_path = Path("/home/radio/logs/update-stations.log")
+    logger = setup_logging('update-stations', log_path)
+    
+    logger.info("=" * 60)
+    logger.info("Starting stations.yaml auto-update")
+    logger.info("=" * 60)
+    
+    try:
+        # Load configuration
+        config = get_config()
+        
+        # Check if auto-update is enabled
+        if not config["enabled"]:
+            logger.info("Auto-update is disabled in configuration")
+            return 0
+        
+        url = config["github_url"]
+        local_path = Path(config["local_path"])
+        
+        logger.info(f"Configuration loaded:")
+        logger.info(f"  URL: {url}")
+        logger.info(f"  Local path: {local_path}")
+        
+        # Download new file
+        content = download_stations(url, logger)
+        
+        # Validate downloaded file
+        validate_downloaded_file(content, logger)
+        
+        # Backup current file
+        backup_current_file(local_path, logger)
+        
+        # Install new file
+        install_new_file(content, local_path, logger)
+        
+        logger.info("=" * 60)
+        logger.info("✓ Stations update completed successfully")
+        logger.info("=" * 60)
+        return 0
+        
+    except (HTTPError, URLError) as e:
+        logger.error(f"Download failed: {e}")
+        logger.error("Update aborted - keeping existing stations.yaml")
+        return 1
+        
+    except ValueError as e:
+        logger.error(f"Validation failed: {e}")
+        logger.error("Update aborted - keeping existing stations.yaml")
+        return 1
+        
+    except Exception as e:
+        logger.error(f"Unexpected error: {e}", exc_info=True)
+        logger.error("Update aborted - keeping existing stations.yaml")
+        return 1
+
+
+if __name__ == "__main__":
+    sys.exit(main())

@@ -1,0 +1,17 @@
+[Unit]
+Description=Radio Stations Auto-Update Timer
+Requires=radio-update-stations.service
+
+[Timer]
+# Run daily at 4:00 AM
+OnCalendar=daily
+OnCalendar=*-*-* 04:00:00
+
+# Also run 2 minutes after boot
+OnBootSec=2min
+
+# If the system was off at scheduled time, run on next boot
+Persistent=true
+
+[Install]
+WantedBy=timers.target

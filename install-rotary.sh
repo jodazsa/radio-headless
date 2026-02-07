@@ -105,7 +105,8 @@ echo "→ Deploying configuration and scripts..."
 sudo cp bin/radio_lib.py /usr/local/bin/
 sudo cp bin/rotary-controller /usr/local/bin/
 sudo cp bin/radio-play /usr/local/bin/
-sudo chmod +x /usr/local/bin/{rotary-controller,radio-play}
+sudo cp bin/update-stations /usr/local/bin/
+sudo chmod +x /usr/local/bin/{rotary-controller,radio-play,update-stations}
 
 # Copy configs (use rotary-specific hardware config)
 sudo cp config/hardware-rotary.yaml /home/radio/
@@ -117,12 +118,15 @@ sudo cp etc/mpd.conf /etc/mpd.conf
 
 # Copy systemd service (only rotary-controller, no encoder or oled services)
 sudo cp systemd/rotary-controller.service /etc/systemd/system/
+sudo cp systemd/radio-update-stations.service /etc/systemd/system/
+sudo cp systemd/radio-update-stations.timer /etc/systemd/system/
 sudo systemctl daemon-reload
 
 # 8. Enable services
 echo "→ Enabling services..."
 sudo systemctl enable rotary-controller.service
 sudo systemctl enable mpd.service
+sudo systemctl enable radio-update-stations.timer
 
 # 9. Verify I2C hardware detection
 echo ""
@@ -156,7 +160,9 @@ echo ""
 echo "5. Verify services:"
 echo "   sudo systemctl status rotary-controller"
 echo "   sudo systemctl status mpd"
+echo "   systemctl status radio-update-stations.timer"
 echo ""
 echo "6. Watch logs:"
 echo "   tail -f /home/radio/logs/rotary.log"
+echo "   tail -f /home/radio/logs/update-stations.log"
 echo ""
