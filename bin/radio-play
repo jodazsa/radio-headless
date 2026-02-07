@@ -1,0 +1,320 @@
+#!/usr/bin/env python3
+"""Radio playback controller for radio-voice project.
+
+Manages MPD playlists and playback for different station types:
+streams, local files, directories, loops, etc.
+"""
+import os
+import sys
+import time
+import random
+from pathlib import Path
+
+try:
+    import yaml
+except ImportError:
+    print("ERROR: Missing PyYAML. Install with: sudo apt -y install python3-yaml", file=sys.stderr)
+    sys.exit(2)
+
+from radio_lib import sh, setup_logging, write_state
+
+STATIONS_PATH = Path("/home/radio/stations.yaml")
+STATE_PATH = Path("/home/radio/.radio-state")
+AUDIO_ROOT = Path("/home/radio/audio")
+
+AUDIO_EXTS = (".mp3", ".flac", ".ogg", ".m4a", ".wav", ".aac")
+
+# Setup logging
+logger = setup_logging('radio-play', Path('/home/radio/logs/radio-play.log'))
+
+
+def die(msg, code=1):
+    """Print error and exit."""
+    logger.error(msg)
+    print(f"ERROR: {msg}", file=sys.stderr)
+    sys.exit(code)
+
+
+def load_yaml(path: Path):
+    """Load YAML file or die trying."""
+    if not path.exists():
+        die(f"{path} not found")
+    return yaml.safe_load(path.read_text()) or {}
+
+
+def norm_path(p: str) -> Path:
+    """
+    Normalize station path forms:
+      - file:///home/radio/audio/x.mp3  -> /home/radio/audio/x.mp3
+      - /home/radio/audio/x.mp3         -> /home/radio/audio/x.mp3
+      - audio/x.mp3                     -> /home/radio/audio/x.mp3
+      - shows/x.mp3 (relative)          -> /home/radio/audio/shows/x.mp3  (assume under AUDIO_ROOT)
+    """
+    p = (p or "").strip()
+    if p.startswith("file://"):
+        p = p.replace("file://", "", 1)
+    if p.startswith("/"):
+        return Path(p)
+    # relative: allow "audio/..." or anything else treated as under AUDIO_ROOT
+    if p.startswith("audio/"):
+        return Path("/home/radio") / p
+    return AUDIO_ROOT / p
+
+
+def mpd_relpath(path: Path) -> str:
+    """
+    Convert a local filesystem path under AUDIO_ROOT into the MPD library path.
+    MPD expects paths RELATIVE to music_directory.
+    """
+    try:
+        rel = path.resolve().relative_to(AUDIO_ROOT.resolve())
+    except Exception:
+        # If someone passes a weird path not under AUDIO_ROOT, MPD won't accept it anyway.
+        die(f"Local path is outside AUDIO_ROOT ({AUDIO_ROOT}): {path}")
+    return rel.as_posix()
+
+
+def get_station(data, bank_id: int, station_id: int):
+    """Get bank and station dicts from config."""
+    banks = data.get("banks")
+    if not isinstance(banks, dict):
+        die("stations.yaml: top-level 'banks' must be a mapping/dict")
+
+    bank = banks.get(bank_id)
+    if bank is None:
+        die(f"Bank {bank_id} not found in stations.yaml")
+
+    stations = bank.get("stations")
+    if not isinstance(stations, dict):
+        die(f"stations.yaml: banks[{bank_id}].stations must be a mapping/dict")
+
+    station = stations.get(station_id)
+    if station is None:
+        die(f"Station {station_id} not found in bank {bank_id}")
+
+    if not isinstance(station, dict):
+        die(f"Station entry bank {bank_id} station {station_id} must be a dict")
+
+    return bank, station
+
+
+def list_audio_files(dir_path: Path):
+    """List all audio files in directory recursively."""
+    if not dir_path.exists():
+        die(f"Directory not found: {dir_path}")
+    if not dir_path.is_dir():
+        die(f"Not a directory: {dir_path}")
+
+    files = []
+    for root, _, names in os.walk(dir_path):
+        for n in names:
+            if n.lower().endswith(AUDIO_EXTS):
+                files.append(Path(root) / n)
+    files.sort(key=lambda p: str(p).lower())
+    return files
+
+
+def ensure_mpd():
+    """Check MPD is running."""
+    r = sh(["mpc", "status"])
+    if r.returncode != 0 and "Connection refused" in (r.stderr + r.stdout):
+        die("MPD connection refused. Is mpd running and bound to 127.0.0.1:6600?")
+
+
+def mpc_clear():
+    """Clear MPD playlist and reset playback modes."""
+    sh(["mpc", "clear"])
+    sh(["mpc", "random", "off"])
+    sh(["mpc", "single", "off"])
+    sh(["mpc", "consume", "off"])
+    sh(["mpc", "repeat", "off"])
+
+
+def mpc_add(item: str):
+    """Add item to MPD playlist."""
+    r = sh(["mpc", "add", item])
+    if r.returncode != 0:
+        die(f"mpc add failed for {item}: {r.stderr.strip() or r.stdout.strip()}")
+
+
+def mpc_play(index: int = 1):
+    """Start playback at given playlist index."""
+    sh(["mpc", "play", str(index)])
+
+
+def parse_time_to_seconds(s: str) -> int:
+    """Parse time string (MM:SS or HH:MM:SS) to seconds."""
+    s = s.strip()
+    if not s or s == "0:00":
+        return 0
+    parts = s.split(":")
+    try:
+        parts_i = [int(p) for p in parts]
+    except ValueError:
+        return 0
+    if len(parts_i) == 2:
+        m, sec = parts_i
+        return m * 60 + sec
+    if len(parts_i) == 3:
+        h, m, sec = parts_i
+        return h * 3600 + m * 60 + sec
+    return 0
+
+
+def mpc_seek_to_random_point():
+    """Seek to random position in current track."""
+    r = sh(["mpc", "status"])
+    if r.returncode != 0:
+        return
+    lines = [ln.strip() for ln in r.stdout.splitlines() if ln.strip()]
+    tline = next((ln for ln in lines if "/" in ln and ":" in ln and "%" in ln), None)
+    if not tline:
+        return
+    parts = tline.split()
+    timepart = next((p for p in parts if "/" in p and ":" in p), None)
+    if not timepart:
+        return
+    try:
+        _cur_s, total_s = timepart.split("/", 1)
+        total = parse_time_to_seconds(total_s)
+        if total <= 10:
+            return
+        target = random.randint(0, max(0, total - 5))
+        sh(["mpc", "seek", str(target)])
+    except Exception:
+        return
+
+
+def play_stream(url: str):
+    """Play internet radio stream."""
+    logger.info(f"Playing stream: {url}")
+    mpc_clear()
+    mpc_add(url)
+    mpc_play(1)
+
+
+def play_file(file_path: Path, loop: bool = False, random_seek: bool = False):
+    """Play single local audio file."""
+    if not file_path.exists():
+        die(f"File not found: {file_path}")
+
+    logger.info(f"Playing file: {file_path} (loop={loop}, random_seek={random_seek})")
+    mpc_clear()
+    mpc_add(mpd_relpath(file_path))  # MPD-relative path
+    if loop:
+        sh(["mpc", "repeat", "on"])
+    mpc_play(1)
+    if random_seek:
+        time.sleep(0.2)
+        mpc_seek_to_random_point()
+
+
+def play_dir(dir_path: Path, start_random_track: bool = False, random_seek: bool = False):
+    """Play directory of audio files."""
+    files = list_audio_files(dir_path)
+    if not files:
+        die(f"No audio files found under: {dir_path}")
+
+    logger.info(f"Playing directory: {dir_path} ({len(files)} files, random_start={start_random_track})")
+    mpc_clear()
+    for f in files:
+        mpc_add(mpd_relpath(f))
+
+    start_index = random.randint(1, len(files)) if start_random_track else 1
+    mpc_play(start_index)
+
+    if random_seek:
+        # Give MPD a moment to open file and know duration
+        time.sleep(0.25)
+        mpc_seek_to_random_point()
+
+
+def normalize_type(stype: str) -> str:
+    """Normalize station type aliases to canonical forms."""
+    stype = (stype or "").strip()
+    aliases = {
+        "directory": "dir",
+        "mp3_dir_random_start_then_in_order": "dir_random_start_then_in_order",
+        "mp3_dir_in_order": "dir",
+        "mp3_loop_random_start": "file_loop_random_start",
+        "mp3_loop": "file_loop",
+    }
+    return aliases.get(stype, stype)
+
+
+def main():
+    """Main entry point for radio-play."""
+    if len(sys.argv) != 3 or any(a in ("-h", "--help") for a in sys.argv):
+        print("Usage: radio-play <bank_id> <station_id>")
+        sys.exit(0)
+
+    try:
+        bank_id = int(sys.argv[1])
+        station_id = int(sys.argv[2])
+    except ValueError:
+        die("bank_id and station_id must be integers")
+
+    logger.info(f"radio-play called: bank={bank_id}, station={station_id}")
+
+    ensure_mpd()
+    data = load_yaml(STATIONS_PATH)
+    _bank, station = get_station(data, bank_id, station_id)
+
+    stype = normalize_type(station.get("type", ""))
+    name = station.get("name", f"Bank {bank_id} Station {station_id}")
+
+    url = station.get("url")
+    path = station.get("path") or station.get("file")
+    directory = station.get("directory") or station.get("dir")
+
+    # Save state
+    write_state(STATE_PATH, current_bank=bank_id, current_station=station_id)
+    
+    logger.info(f"Playing: '{name}' (type={stype})")
+
+    # Handle different station types
+    if stype == "stream":
+        if not isinstance(url, str) or not url.strip():
+            die(f"{name}: stream station requires 'url'")
+        play_stream(url.strip())
+        return 0
+
+    if stype == "file":
+        if not isinstance(path, str) or not path.strip():
+            die(f"{name}: file station requires 'path' (or 'file')")
+        play_file(norm_path(path), loop=False, random_seek=False)
+        return 0
+
+    if stype in ("dir", "dir_in_order"):
+        if not isinstance(directory, str) or not directory.strip():
+            die(f"{name}: dir station requires 'directory' (or 'dir')")
+        play_dir(norm_path(directory), start_random_track=False)
+        return 0
+
+    if stype == "dir_random_start_then_in_order":
+        if not isinstance(directory, str) or not directory.strip():
+            die(f"{name}: dir_random_start_then_in_order requires 'directory' (or 'dir')")
+        play_dir(norm_path(directory), start_random_track=True, random_seek=True)
+        return 0
+
+    if stype == "file_loop":
+        if not isinstance(path, str) or not path.strip():
+            die(f"{name}: file_loop requires 'path' (or 'file')")
+        play_file(norm_path(path), loop=True, random_seek=False)
+        return 0
+
+    if stype == "file_loop_random_start":
+        if not isinstance(path, str) or not path.strip():
+            die(f"{name}: file_loop_random_start requires 'path' (or 'file')")
+        play_file(norm_path(path), loop=True, random_seek=True)
+        return 0
+
+    die(
+        f"{name}: unsupported type '{station.get('type')}' "
+        "(supported: stream, file, dir, mp3_dir_random_start_then_in_order, mp3_loop, mp3_loop_random_start)"
+    )
+    return 1
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
