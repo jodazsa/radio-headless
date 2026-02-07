@@ -137,6 +137,39 @@ def stations_exist(bank: int, station: int) -> bool:
     return isinstance(s, dict) and station in s
 
 
+class StationsCache:
+    """Cache stations.yaml and reload only when file mtime changes."""
+
+    def __init__(self, path: Path):
+        self.path = path
+        self._mtime = None
+        self._data = {}
+
+    def _reload_if_needed(self) -> None:
+        try:
+            mtime = self.path.stat().st_mtime
+        except FileNotFoundError:
+            # Keep empty cache if stations file disappears.
+            self._mtime = None
+            self._data = {}
+            return
+
+        if self._mtime != mtime:
+            self._data = load_yaml(self.path)
+            self._mtime = mtime
+
+    def station_exists(self, bank: int, station: int) -> bool:
+        self._reload_if_needed()
+
+        banks = self._data.get("banks", {})
+        b = banks.get(bank)
+        if not isinstance(b, dict):
+            return False
+
+        s = b.get("stations", {})
+        return isinstance(s, dict) and station in s
+
+
 def main():
     """Main rotary controller loop."""
     logger.info("=" * 50)
@@ -271,6 +304,8 @@ def main():
     last_switch_change = 0.0
     
     logger.info("Entering main loop")
+
+    stations_cache = StationsCache(STATIONS_PATH)
     
     # Main event loop
     while True:
@@ -303,7 +338,7 @@ def main():
                 write_state(STATE_PATH, current_bank=cur_bank, current_station=cur_station)
                 
                 # Play the new station immediately (no settle delay needed)
-                if stations_exist(cur_bank, cur_station):
+                if stations_cache.station_exists(cur_bank, cur_station):
                     if cur_bank == playing_bank and cur_station == playing_station:
                         logger.info(
                             f"Already playing: Bank {cur_bank}, Station {cur_station} (skip restart)"
