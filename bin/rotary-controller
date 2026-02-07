@@ -179,6 +179,12 @@ def main():
     # Read initial switch positions
     cur_bank = clamp(read_bcd_switch(bank_pins), bank_min, bank_max)
     cur_station = clamp(read_bcd_switch(station_pins), st_min, st_max)
+
+    # Track last station we requested from radio-play.
+    # Start from persisted state so switch bounce that settles back to the
+    # already playing position does not trigger an unnecessary restart.
+    playing_bank = int(st.get("current_bank", str(cur_bank)))
+    playing_station = int(st.get("current_station", str(cur_station)))
     
     write_state(
         STATE_PATH,
@@ -231,8 +237,15 @@ def main():
                 
                 # Play the new station immediately (no settle delay needed)
                 if stations_exist(cur_bank, cur_station):
-                    logger.info(f"Playing: Bank {cur_bank}, Station {cur_station}")
-                    sh(["radio-play", str(cur_bank), str(cur_station)])
+                    if cur_bank == playing_bank and cur_station == playing_station:
+                        logger.info(
+                            f"Already playing: Bank {cur_bank}, Station {cur_station} (skip restart)"
+                        )
+                    else:
+                        logger.info(f"Playing: Bank {cur_bank}, Station {cur_station}")
+                        sh(["radio-play", str(cur_bank), str(cur_station)])
+                        playing_bank = cur_bank
+                        playing_station = cur_station
                 else:
                     logger.warning(f"Station does not exist: Bank {cur_bank}, Station {cur_station}")
             
