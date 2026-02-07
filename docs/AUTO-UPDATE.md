@@ -15,6 +15,14 @@ auto_update:
   local_path: "/home/radio/stations.yaml"
 ```
 
+## Update Source Expectations
+
+The default `github_url` in this repo points at a curated upstream stations list maintained by the project author. This is intentional so a fresh install can receive station updates without extra setup.
+
+- If you want to track your own list, set `auto_update.github_url` to your own raw `stations.yaml` URL.
+- If you want to keep local/manual edits only, set `auto_update.enabled: false`.
+- `local_path` controls where updates are written (default `/home/radio/stations.yaml`).
+
 ## Usage
 
 ### Check Status

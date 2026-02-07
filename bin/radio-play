@@ -10,13 +10,7 @@ import time
 import random
 from pathlib import Path
 
-try:
-    import yaml
-except ImportError:
-    print("ERROR: Missing PyYAML. Install with: sudo apt -y install python3-yaml", file=sys.stderr)
-    sys.exit(2)
-
-from radio_lib import sh, setup_logging, write_state
+from radio_lib import sh, setup_logging, write_state, load_yaml
 
 STATIONS_PATH = Path("/home/radio/stations.yaml")
 STATE_PATH = Path("/home/radio/.radio-state")
@@ -34,12 +28,6 @@ def die(msg, code=1):
     print(f"ERROR: {msg}", file=sys.stderr)
     sys.exit(code)
 
-
-def load_yaml(path: Path):
-    """Load YAML file or die trying."""
-    if not path.exists():
-        die(f"{path} not found")
-    return yaml.safe_load(path.read_text()) or {}
 
 
 def norm_path(p: str) -> Path:
@@ -257,6 +245,8 @@ def main():
     logger.info(f"radio-play called: bank={bank_id}, station={station_id}")
 
     ensure_mpd()
+    if not STATIONS_PATH.exists():
+        die(f"{STATIONS_PATH} not found")
     data = load_yaml(STATIONS_PATH)
     _bank, station = get_station(data, bank_id, station_id)
 
