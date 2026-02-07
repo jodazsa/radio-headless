@@ -7,7 +7,9 @@ Designed to run via systemd timer daily at 4 AM.
 """
 import sys
 import shutil
+import hashlib
 import tempfile
+import yaml
 from pathlib import Path
 from datetime import datetime
 from typing import Dict, Any
@@ -15,11 +17,10 @@ from urllib.request import urlopen
 from urllib.error import URLError, HTTPError
 
 # Import shared utilities
-sys.path.insert(0, '/usr/local/bin')
 from radio_lib import setup_logging, load_yaml, validate_stations_config
 
 
-def get_config() -> Dict[str, Any]:
+def get_config(logger=None) -> Dict[str, Any]:
     """Load auto_update configuration from hardware config.
     
     Returns:
@@ -27,24 +28,32 @@ def get_config() -> Dict[str, Any]:
     """
     config_path = Path("/home/radio/hardware-rotary.yaml")
     
+    # Default configuration
+    defaults = {
+        "enabled": True,
+        "github_url": "https://raw.githubusercontent.com/jodazsa/radio/refs/heads/main/config/stations.yaml",
+        "local_path": "/home/radio/stations.yaml"
+    }
+    
+    if not config_path.exists():
+        if logger:
+            logger.warning(f"Config file not found: {config_path}, using defaults")
+        return defaults
+    
     try:
         cfg = load_yaml(config_path)
     except Exception as e:
-        # Return defaults if config doesn't exist or is invalid
-        return {
-            "enabled": True,
-            "github_url": "https://raw.githubusercontent.com/jodazsa/radio/refs/heads/main/config/stations.yaml",
-            "local_path": "/home/radio/stations.yaml"
-        }
+        if logger:
+            logger.error(f"Failed to parse config file: {e}")
+        raise
     
     # Extract auto_update section with defaults
     auto_update = cfg.get("auto_update", {})
     
     return {
-        "enabled": auto_update.get("enabled", True),
-        "github_url": auto_update.get("github_url", 
-            "https://raw.githubusercontent.com/jodazsa/radio/refs/heads/main/config/stations.yaml"),
-        "local_path": auto_update.get("local_path", "/home/radio/stations.yaml")
+        "enabled": auto_update.get("enabled", defaults["enabled"]),
+        "github_url": auto_update.get("github_url", defaults["github_url"]),
+        "local_path": auto_update.get("local_path", defaults["local_path"])
     }
 
 
@@ -77,6 +86,21 @@ def download_stations(url: str, logger) -> bytes:
         raise
 
 
+def files_match(content: bytes, path: Path) -> bool:
+    """Check if downloaded content matches existing file.
+    
+    Args:
+        content: Downloaded file content
+        path: Path to existing file
+        
+    Returns:
+        True if files have identical content, False otherwise
+    """
+    if not path.exists():
+        return False
+    return hashlib.sha256(content).digest() == hashlib.sha256(path.read_bytes()).digest()
+
+
 def validate_downloaded_file(content: bytes, logger) -> Dict[str, Any]:
     """Validate downloaded stations.yaml content.
     
@@ -90,8 +114,6 @@ def validate_downloaded_file(content: bytes, logger) -> Dict[str, Any]:
     Raises:
         ValueError: If validation fails
     """
-    import yaml
-    
     # Parse YAML
     try:
         cfg = yaml.safe_load(content.decode('utf-8'))
@@ -195,7 +217,7 @@ def main() -> int:
     
     try:
         # Load configuration
-        config = get_config()
+        config = get_config(logger)
         
         # Check if auto-update is enabled
         if not config["enabled"]:
@@ -211,6 +233,12 @@ def main() -> int:
         
         # Download new file
         content = download_stations(url, logger)
+        
+        # Check if content has changed
+        if files_match(content, local_path):
+            logger.info("stations.yaml is already up to date")
+            logger.info("=" * 60)
+            return 0
         
         # Validate downloaded file
         validate_downloaded_file(content, logger)

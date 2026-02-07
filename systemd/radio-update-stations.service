@@ -12,6 +12,3 @@ ExecStart=/usr/bin/python3 /usr/local/bin/update-stations
 StandardOutput=journal
 StandardError=journal
 SyslogIdentifier=update-stations
-
-[Install]
-WantedBy=multi-user.target

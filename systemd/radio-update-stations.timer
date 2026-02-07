@@ -1,10 +1,8 @@
 [Unit]
 Description=Radio Stations Auto-Update Timer
-Requires=radio-update-stations.service
 
 [Timer]
 # Run daily at 4:00 AM
-OnCalendar=daily
 OnCalendar=*-*-* 04:00:00
 
 # Also run 2 minutes after boot

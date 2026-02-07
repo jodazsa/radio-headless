@@ -2,184 +2,111 @@
 
 ## Overview
 
-The radio-headless project now includes an automatic update feature that pulls the latest `stations.yaml` from a configurable GitHub URL on a daily schedule. This ensures your radio always has the latest station list without manual intervention.
-
-## How It Works
-
-1. **Daily Updates**: The system automatically checks for updates at 4:00 AM every day
-2. **Boot Updates**: On system boot, updates are checked after a 2-minute delay
-3. **Validation**: Downloaded files are validated before installation
-4. **Backup**: Current `stations.yaml` is backed up before any changes
-5. **Safety**: If validation fails, the update is aborted and existing file is kept
+Automatically pulls the latest `stations.yaml` from GitHub daily at 4 AM and 2 minutes after boot. Downloads are validated before installation, and the current file is backed up (keeping last 10).
 
 ## Configuration
 
-The auto-update feature is configured in `/home/radio/hardware-rotary.yaml`:
+Edit `/home/radio/hardware-rotary.yaml`:
 
 ```yaml
 auto_update:
-  # Enable/disable auto-updates
-  enabled: true
-  
-  # GitHub raw URL to pull stations.yaml from
-  github_url: "https://raw.githubusercontent.com/jodazsa/radio/refs/heads/main/config/stations.yaml"
-  
-  # Local path where stations.yaml is installed
+  enabled: true  # Set to false to disable
+  github_url: "https://raw.githubusercontent.com/YOUR_USERNAME/YOUR_REPO/main/config/stations.yaml"
   local_path: "/home/radio/stations.yaml"
 ```
 
-### Configuration Options
-
-- **enabled** (bool): Set to `false` to disable auto-updates
-- **github_url** (string): The raw GitHub URL to your stations.yaml file
-- **local_path** (string): Where to install the downloaded file (usually `/home/radio/stations.yaml`)
-
-## Components
-
-### 1. Update Script (`/usr/local/bin/update-stations`)
-
-Python script that:
-- Reads configuration from `hardware-rotary.yaml`
-- Downloads stations.yaml from GitHub using `urllib` (no external dependencies)
-- Validates the downloaded file structure
-- Creates timestamped backups (keeps last 10)
-- Installs the new file with correct permissions
-- Logs all operations to `/home/radio/logs/update-stations.log`
-
-### 2. Systemd Service (`radio-update-stations.service`)
-
-One-shot service that runs the update script when triggered by the timer.
-
-### 3. Systemd Timer (`radio-update-stations.timer`)
-
-Schedules the update service to run:
-- Daily at 4:00 AM
-- 2 minutes after system boot
-- Uses `Persistent=true` to catch up on missed runs
-
 ## Usage
 
-### Check Timer Status
+### Check Status
 
 ```bash
-# Check if timer is active
+# View timer status and next run
 systemctl status radio-update-stations.timer
-
-# View next scheduled run
 systemctl list-timers radio-update-stations.timer
 ```
 
 ### Manual Update
 
-To manually trigger an update:
-
 ```bash
-# Run as radio user
-sudo -u radio /usr/local/bin/update-stations
-
-# Or trigger the service
+# Trigger update now
 sudo systemctl start radio-update-stations.service
+
+# Or run directly
+sudo -u radio /usr/local/bin/update-stations
 ```
 
 ### View Logs
 
 ```bash
-# Tail the update log
+# Tail update log
 tail -f /home/radio/logs/update-stations.log
 
 # View systemd journal
 sudo journalctl -u radio-update-stations.service -n 50
-
-# View all timer activations
-sudo journalctl -u radio-update-stations.timer
 ```
 
-### Disable Auto-Updates
-
-To temporarily disable updates without removing the service:
+### Disable/Enable
 
 ```bash
-# Stop and disable the timer
+# Disable auto-updates
 sudo systemctl stop radio-update-stations.timer
 sudo systemctl disable radio-update-stations.timer
-```
 
-Or edit `/home/radio/hardware-rotary.yaml` and set:
-
-```yaml
-auto_update:
-  enabled: false
-```
-
-### Re-enable Auto-Updates
-
-```bash
-# Enable and start the timer
+# Re-enable
 sudo systemctl enable radio-update-stations.timer
 sudo systemctl start radio-update-stations.timer
 ```
 
+Or set `enabled: false` in the config file.
+
 ## Backups
 
-Backups are stored in `/home/radio/backups/` with timestamps:
-
-```
-/home/radio/backups/
-├── stations_20260207_040002.yaml
-├── stations_20260206_040001.yaml
-└── stations_20260205_040003.yaml
-```
-
-The system automatically keeps the 10 most recent backups and deletes older ones.
+Backups are in `/home/radio/backups/stations_TIMESTAMP.yaml` (last 10 kept).
 
 ### Restore from Backup
 
-To restore a previous version:
-
 ```bash
-# List available backups
+# List backups
 ls -lh /home/radio/backups/
 
-# Restore a specific backup
+# Restore
 sudo cp /home/radio/backups/stations_20260207_040002.yaml /home/radio/stations.yaml
 sudo chown radio:radio /home/radio/stations.yaml
-
-# Restart the radio controller to pick up changes
 sudo systemctl restart rotary-controller.service
 ```
 
-## Validation
+## How It Works
 
-The update script validates downloaded files to ensure they:
-1. Are valid YAML syntax
-2. Contain a `banks:` section
-3. Have at least one bank defined
-4. Follow the expected structure (using `validate_stations_config()` from `radio_lib`)
-
-If validation fails, the update is aborted and the existing file remains unchanged.
+1. Timer triggers at 4 AM daily and 2 min after boot
+2. Script downloads from configured GitHub URL
+3. Content is SHA256-compared with current file (no-op if identical)
+4. Downloaded YAML is validated (structure + at least one bank)
+5. Current file is backed up with timestamp
+6. New file is installed with correct permissions
+7. Success/failure logged to `/home/radio/logs/update-stations.log`
 
 ## Troubleshooting
 
 ### Update Failed
 
-Check the log for errors:
 ```bash
+# Check logs
 tail -50 /home/radio/logs/update-stations.log
+
+# Test GitHub URL manually
+curl -I "YOUR_GITHUB_RAW_URL"
 ```
 
 Common issues:
 - **Network error**: Check internet connection
-- **GitHub URL incorrect**: Verify `github_url` in config
-- **Validation failed**: The downloaded file has structural problems
-- **Permission denied**: Check file ownership and permissions
+- **HTTP 404**: GitHub URL is incorrect
+- **Validation failed**: Downloaded file has structural problems
+- **Permission denied**: Check ownership (`sudo chown radio:radio /home/radio/stations.yaml`)
 
 ### Timer Not Running
 
 ```bash
-# Check timer status
-systemctl status radio-update-stations.timer
-
-# Check if timer is enabled
+# Check if enabled
 systemctl is-enabled radio-update-stations.timer
 
 # Enable if needed
@@ -187,32 +114,11 @@ sudo systemctl enable radio-update-stations.timer
 sudo systemctl start radio-update-stations.timer
 ```
 
-### Test Download Manually
+## Security
 
-```bash
-# Test if the URL is accessible
-curl -I "https://raw.githubusercontent.com/jodazsa/radio/refs/heads/main/config/stations.yaml"
-
-# Download and check content
-curl "https://raw.githubusercontent.com/jodazsa/radio/refs/heads/main/config/stations.yaml" | head -20
-```
-
-## Security Considerations
-
-- The script runs as the `radio` user (not root)
-- Downloads are validated before installation
-- Original file is always backed up before changes
-- Only files from the configured GitHub URL are accepted
-- The script will never overwrite the file if validation fails
-
-## Integration with Deployment
-
-The auto-update feature is automatically installed and enabled when using:
-- `install-rotary.sh` (initial installation)
-- `deploy-rotary.sh` (updates)
-
-Both scripts will:
-1. Install the update-stations script
-2. Install systemd service and timer
-3. Enable the timer
-4. Show timer status after deployment
+- Runs as `radio` user (not root)
+- Downloads validated before installation (YAML structure + banks check)
+- Original file always backed up before changes
+- Failed updates never overwrite existing file
+- Only configured GitHub URL is accepted
+- SHA256 comparison prevents unnecessary writes
