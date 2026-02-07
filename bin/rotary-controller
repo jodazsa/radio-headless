@@ -11,6 +11,7 @@ import board
 import busio
 from adafruit_seesaw.seesaw import Seesaw
 from adafruit_seesaw.rotaryio import IncrementalEncoder
+from mpd import MPDClient
 import RPi.GPIO as GPIO
 
 from radio_lib import (
@@ -21,7 +22,6 @@ from radio_lib import (
     write_state,
     sh,
     clamp,
-    validate_hardware_config,
     wait_for_mpd
 )
 
@@ -37,6 +37,63 @@ I2C_ERR_BACKOFF = 0.2  # Seconds to wait after I2C error
 
 # Setup logging
 logger = setup_logging('rotary-controller', Path('/home/radio/logs/rotary.log'))
+
+
+class MpdConnection:
+    """Persistent MPD client wrapper with automatic reconnect."""
+
+    def __init__(self, logger, host: str = "localhost", port: int = 6600, timeout: int = 5):
+        self.logger = logger
+        self.host = host
+        self.port = port
+        self.timeout = timeout
+        self.client = self._new_client()
+        self.connected = False
+
+    def _new_client(self) -> MPDClient:
+        client = MPDClient()
+        client.timeout = self.timeout
+        client.idletimeout = None
+        return client
+
+    def _ensure_connected(self) -> None:
+        if self.connected:
+            return
+        self.client.connect(self.host, self.port)
+        self.connected = True
+
+    def _reconnect(self) -> None:
+        try:
+            if self.connected:
+                self.client.disconnect()
+        except Exception:
+            pass
+        self.client = self._new_client()
+        self.connected = False
+        self._ensure_connected()
+
+    def command(self, name: str, *args):
+        for attempt in range(2):
+            try:
+                if attempt == 0:
+                    self._ensure_connected()
+                else:
+                    self._reconnect()
+                return getattr(self.client, name)(*args)
+            except Exception as err:
+                self.connected = False
+                if attempt == 1:
+                    raise
+                self.logger.warning(f"MPD command '{name}' failed ({err}), reconnecting")
+
+    def status(self) -> dict:
+        return self.command("status")
+
+    def setvol(self, volume: int) -> None:
+        self.command("setvol", int(volume))
+
+    def toggle(self) -> None:
+        self.command("pause")
 
 
 def read_bcd_switch(pins: dict) -> int:
@@ -131,6 +188,8 @@ def main():
     # Wait for MPD to be ready
     if not wait_for_mpd(logger=logger):
         raise SystemExit("MPD not available")
+
+    mpd_conn = MpdConnection(logger)
     
     # Setup GPIO
     logger.info("Initializing GPIO...")
@@ -268,14 +327,12 @@ def main():
                 last_vol_pos = vol_pos
                 
                 # Get current MPD volume
-                r = sh(["mpc", "status"])
+                status = mpd_conn.status()
                 vol = last_volume
-                for line in r.stdout.splitlines():
-                    if line.startswith("volume:"):
-                        try:
-                            vol = int(line.split()[1].strip("%"))
-                        except Exception:
-                            pass
+                try:
+                    vol = int(status.get("volume", last_volume))
+                except (TypeError, ValueError):
+                    pass
                 
                 if muted:
                     # When muted, track volume changes but don't apply to MPD
@@ -284,7 +341,7 @@ def main():
                 else:
                     vol = clamp(vol + delta * vstep, vmin, vmax)
                     last_volume = vol
-                    sh(["mpc", "volume", str(vol)])
+                    mpd_conn.setvol(vol)
                     write_state(STATE_PATH, last_volume=vol)
                     logger.debug(f"Volume: {vol}")
             
@@ -295,15 +352,15 @@ def main():
                 logger.info(f"Volume button pressed, action: {action}")
                 
                 if action == "play_pause":
-                    sh(["mpc", "toggle"])
+                    mpd_conn.toggle()
                 elif action == "mute_toggle":
                     if not muted:
                         muted = True
-                        sh(["mpc", "volume", "0"])
+                        mpd_conn.setvol(0)
                         logger.info("Muted")
                     else:
                         muted = False
-                        sh(["mpc", "volume", str(last_volume)])
+                        mpd_conn.setvol(last_volume)
                         logger.info(f"Unmuted, volume: {last_volume}")
             
             last_btn = btn
