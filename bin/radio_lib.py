@@ -7,6 +7,7 @@ oled-display, and radio-play scripts.
 import logging
 import subprocess
 import yaml
+from mpd import MPDClient
 from pathlib import Path
 from typing import Dict, Any, Optional
 
@@ -305,18 +306,27 @@ def wait_for_mpd(max_retries: int = 10, delay: float = 1.0, logger: Optional[log
             sys.exit(1)
     """
     import time
-    
+
     for attempt in range(max_retries):
-        result = sh(["mpc", "status"])
-        if result.returncode == 0:
+        client = MPDClient()
+        client.timeout = 5
+        client.idletimeout = None
+        try:
+            client.connect("localhost", 6600)
+            client.status()
             if logger:
                 logger.info(f"MPD ready (attempt {attempt + 1}/{max_retries})")
             return True
-        
-        if logger:
-            logger.warning(f"MPD not ready, retry {attempt + 1}/{max_retries}")
-        time.sleep(delay)
-    
+        except Exception:
+            if logger:
+                logger.warning(f"MPD not ready, retry {attempt + 1}/{max_retries}")
+            time.sleep(delay)
+        finally:
+            try:
+                client.disconnect()
+            except Exception:
+                pass
+
     if logger:
         logger.error("MPD failed to start after all retries")
     return False

@@ -96,7 +96,8 @@ echo "→ Installing Python packages..."
 pip3 install --break-system-packages \
     adafruit-circuitpython-seesaw \
     adafruit-blinka \
-    RPi.GPIO
+    RPi.GPIO \
+    python-mpd2
 
 # 7. Deploy files
 echo "→ Deploying configuration and scripts..."
