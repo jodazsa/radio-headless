@@ -1,6 +1,6 @@
 # Rotary Switch Radio Variant
 
-This is a variant of the radio-voice project that uses **BCD rotary switches** instead of rotary encoders and has **no OLED display**.
+This is a variant of the radio-headless project that uses **BCD rotary switches** instead of rotary encoders and has **no OLED display**.
 
 ## Hardware Differences
 
@@ -50,31 +50,29 @@ This is a variant of the radio-voice project that uses **BCD rotary switches** i
 
 ### Raspberry Pi OS + microSD setup (from scratch)
 
-1. **Download Raspberry Pi Imager** on your computer (Mac/Windows/Linux).
-2. Insert the microSD card into your computer (using a card reader if needed).
-3. In Raspberry Pi Imager:
-   - **Raspberry Pi Device**: choose your Pi model (for example, Pi Zero 2 W)
-   - **Operating System**: choose **Raspberry Pi OS Lite (64-bit)**
-   - **Storage**: choose your microSD card
-4. Click **Next** and choose **Edit Settings** (recommended), then configure:
-   - Hostname
-      - echo1 - currently running encoder version
-      - wolfmann - prototype for rotary, no screen version
-   - Username/password
-      - username:  radio
-   - Wi-Fi SSID/password + country
+1. **Install Raspberry Pi Imager** on your computer (Mac/Windows/Linux):
+   https://www.raspberrypi.com/software/
+2. Insert the microSD card into your computer.
+3. In Raspberry Pi Imager, click **CHOOSE DEVICE**, **CHOOSE OS**, and **CHOOSE STORAGE**:
+   - Device: your Raspberry Pi model (for example, Pi Zero 2 W)
+   - OS: **Raspberry Pi OS Lite (64-bit)**
+   - Storage: your microSD card
+4. Click **NEXT** → **EDIT SETTINGS** (recommended), then set:
+   - Hostname (any value you want, for example `radio.local`)
+   - Username/password (any login user is fine)
+   - Wi-Fi SSID/password + country (if using Wi-Fi)
    - Locale/timezone
    - Enable SSH
-5. Click **Save** then **Yes** to apply OS customization.
-6. Click **Write** and wait for flashing + verification to finish.
-7. **Safely eject** the microSD card from your computer.
-8. With the Pi powered off, **insert the microSD card into the Raspberry Pi**.
-9. Power on the Pi and wait ~1-2 minutes for first boot.
-10. SSH into the Pi from your computer:
+5. Click **SAVE** then **YES** to apply those settings.
+6. Click **YES** to write the card and wait for flash + verify to complete.
+7. Eject the microSD card safely from your computer.
+8. With power disconnected from the Pi, insert the microSD card.
+9. Connect power and wait about 1-2 minutes for first boot.
+10. SSH from your computer:
 
 ```bash
 ssh <your-user>@<hostname>.local
-# example: ssh radio@hostname.local
+# example: ssh alex@radio.local
 ```
 
 11. Continue with the project installation steps below.
@@ -84,8 +82,10 @@ ssh <your-user>@<hostname>.local
 ```bash
 # Clone the repo
 cd ~
-git clone https://github.com/jodazsa/radio-voice.git
-cd radio-voice
+git clone https://github.com/jodazsa/radio-headless.git
+cd radio-headless
+
+# Run rotary variant installation
 chmod +x install-rotary.sh
 ./install-rotary.sh
 
@@ -103,6 +103,17 @@ sudo systemctl status mpd
 # Check I2C
 i2cdetect -y 1
 # Should show 0x49 (volume encoder)
+
+# Check HiFiBerry MiniAmp is detected by ALSA
+aplay -l
+# Should list a HiFiBerry/HifiBerry card
+
+# Show clear HiFiBerry status (CONNECTED + ENABLED, or NOT DETECTED)
+if aplay -l | grep -qi hifiberry; then
+  echo "HiFiBerry MiniAmp status: CONNECTED and ENABLED"
+else
+  echo "HiFiBerry MiniAmp status: NOT DETECTED (check wiring/overlay/reboot)"
+fi
 
 # Watch logs
 tail -f /home/radio/logs/rotary.log
@@ -160,7 +171,7 @@ polling:
 ## Updating from GitHub
 
 ```bash
-cd ~/radio-voice
+cd ~/radio-headless
 ./deploy-rotary.sh
 ```
 
