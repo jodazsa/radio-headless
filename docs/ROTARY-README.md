@@ -57,8 +57,11 @@ This is a variant of the radio-voice project that uses **BCD rotary switches** i
    - **Operating System**: choose **Raspberry Pi OS Lite (64-bit)**
    - **Storage**: choose your microSD card
 4. Click **Next** and choose **Edit Settings** (recommended), then configure:
-   - Hostname (for example `radio.local`)
+   - Hostname
+      - echo1 - currently running encoder version
+      - wolfmann - prototype for rotary, no screen version
    - Username/password
+      - username:  radio
    - Wi-Fi SSID/password + country
    - Locale/timezone
    - Enable SSH
@@ -71,7 +74,7 @@ This is a variant of the radio-voice project that uses **BCD rotary switches** i
 
 ```bash
 ssh <your-user>@<hostname>.local
-# example: ssh pi@radio.local
+# example: ssh radio@hostname.local
 ```
 
 11. Continue with the project installation steps below.
