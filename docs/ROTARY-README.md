@@ -48,6 +48,34 @@ This is a variant of the radio-voice project that uses **BCD rotary switches** i
 
 ## Installation
 
+### Raspberry Pi OS + microSD setup (from scratch)
+
+1. **Download Raspberry Pi Imager** on your computer (Mac/Windows/Linux).
+2. Insert the microSD card into your computer (using a card reader if needed).
+3. In Raspberry Pi Imager:
+   - **Raspberry Pi Device**: choose your Pi model (for example, Pi Zero 2 W)
+   - **Operating System**: choose **Raspberry Pi OS Lite (64-bit)**
+   - **Storage**: choose your microSD card
+4. Click **Next** and choose **Edit Settings** (recommended), then configure:
+   - Hostname (for example `radio.local`)
+   - Username/password
+   - Wi-Fi SSID/password + country
+   - Locale/timezone
+   - Enable SSH
+5. Click **Save** then **Yes** to apply OS customization.
+6. Click **Write** and wait for flashing + verification to finish.
+7. **Safely eject** the microSD card from your computer.
+8. With the Pi powered off, **insert the microSD card into the Raspberry Pi**.
+9. Power on the Pi and wait ~1-2 minutes for first boot.
+10. SSH into the Pi from your computer:
+
+```bash
+ssh <your-user>@<hostname>.local
+# example: ssh pi@radio.local
+```
+
+11. Continue with the project installation steps below.
+
 ### Fresh Installation
 
 ```bash
