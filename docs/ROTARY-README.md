@@ -168,6 +168,12 @@ polling:
   switch_debounce: 0.05      # Ignore changes faster than this
 ```
 
+## Local Music Files (for offline stations)
+
+If you use stations with `type: mp3_loop_random_start` or `type: mp3_dir_random_start_then_in_order`, see:
+
+- [Music Transfer Guide](./MUSIC-TRANSFER.md)
+
 ## Updating from GitHub
 
 ```bash
