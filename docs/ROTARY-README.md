@@ -84,10 +84,8 @@ ssh <your-user>@<hostname>.local
 ```bash
 # Clone the repo
 cd ~
-git clone git@github.com:jodazsa/radio-voice.git
+git clone https://github.com/jodazsa/radio-voice.git
 cd radio-voice
-
-# Run rotary variant installation
 chmod +x install-rotary.sh
 ./install-rotary.sh
 
