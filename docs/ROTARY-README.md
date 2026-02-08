@@ -58,7 +58,7 @@ This is a variant of the radio-headless project that uses **BCD rotary switches*
    - OS: **Raspberry Pi OS Lite (64-bit)**
    - Storage: your microSD card
 4. Click **NEXT** → **EDIT SETTINGS** (recommended), then set:
-   - Hostname (any value you want, for example `radio.local`)
+   - Hostname (any value you want, for example `radio`)
    - Username/password (any login user is fine)
    - Wi-Fi SSID/password + country (if using Wi-Fi)
    - Locale/timezone
