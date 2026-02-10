@@ -206,18 +206,21 @@ your switch output code order does not match the bit significance configured in
 2. Keep wiring as-is and use `station_decode_map` / `bank_decode_map` to map
    raw codes back to logical positions.
 
-For an FR01 pattern that reports station raws in order:
-`[0, 2, 1, 3, 4, 6, 5, 7, 8, 10]`, use:
+Example mappings for a common FR01 wiring pattern:
+
+- Bank raws: `[0, 1, 2, 3, 4, 5, 6, 7, 8, 12]` → map `12: 9`
+- Station raws: `[0, 2, 1, 3, 4, 6, 5, 7, 8, 9]` → swap `1↔2` and `5↔6`
 
 ```yaml
 switches:
+  bank_decode_map:
+    12: 9
+
   station_decode_map:
     1: 2
     2: 1
     5: 6
     6: 5
-    9: 9
-    10: 9
 ```
 
 ### Volume Not Working
