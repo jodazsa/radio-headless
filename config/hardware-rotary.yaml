@@ -5,11 +5,9 @@ i2c:
 switches:
   # Station selector switch (BCD rotary, 10 positions)
   # Reads binary pattern from 4 GPIO pins
-  # NOTE: bit0/bit1 are intentionally swapped (GPIO 9 <-> 10)
-  # to match observed FR01 real-coded sequence on this hardware.
   station_switch:
-    bit0: 10  # GPIO 10 (value 1)
-    bit1: 9   # GPIO 9  (value 2)
+    bit0: 9   # GPIO 9  (value 1)
+    bit1: 10  # GPIO 10 (value 2)
     bit2: 22  # GPIO 22 (value 4)
     bit3: 17  # GPIO 17 (value 8)
   
@@ -21,9 +19,21 @@ switches:
     bit3: 11  # GPIO 11 (value 8)
 
   # Optional raw-code decode map overrides (raw BCD 0-15 -> logical digit).
-  # Defaults map 0-9 directly; this override remaps logical 9 to raw 12.
+  # These defaults compensate for observed line-order differences from
+  # some FR01 switch modules so knob positions still read in human order 0-9.
   bank_decode_map:
-    12: 9
+    1: 4
+    3: 6
+    4: 1
+    6: 3
+
+  station_decode_map:
+    1: 2
+    2: 1
+    5: 6
+    6: 5
+    9: 9
+    10: 9
 
 encoders:
   volume_encoder: 0  # Only one encoder for volume

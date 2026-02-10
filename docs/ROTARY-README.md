@@ -198,6 +198,28 @@ tail -f /home/radio/logs/rotary.log
 
 Check switch wiring matches configuration in `hardware-rotary.yaml`
 
+If positions advance out-of-order (for example `0,2,1,3,...` or `0,4,2,6,...`),
+your switch output code order does not match the bit significance configured in
+`station_switch` / `bank_switch`. You can fix this two ways:
+
+1. Rewire pins so switch code lines map directly to `bit0/bit1/bit2/bit3`
+2. Keep wiring as-is and use `station_decode_map` / `bank_decode_map` to map
+   raw codes back to logical positions.
+
+For an FR01 pattern that reports station raws in order:
+`[0, 2, 1, 3, 4, 6, 5, 7, 8, 10]`, use:
+
+```yaml
+switches:
+  station_decode_map:
+    1: 2
+    2: 1
+    5: 6
+    6: 5
+    9: 9
+    10: 9
+```
+
 ### Volume Not Working
 
 ```bash
