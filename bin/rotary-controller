@@ -75,6 +75,30 @@ def normalize_code_map(raw_map: object, name: str) -> Dict[int, int]:
     return normalized
 
 
+def build_decode_map(raw_map: object, name: str) -> Dict[int, int]:
+    """Build switch decode map with sensible defaults and optional overrides.
+
+    Defaults map raw BCD 0-9 directly to logical 0-9. If the override map
+    includes any entry decoding to 9, default 9-mappings are removed first so
+    configs can remap digit 9 (for example 12 -> 9).
+    """
+    decode_map = {code: code for code in range(10)}
+    if raw_map is None:
+        return decode_map
+
+    overrides = normalize_code_map(raw_map, name)
+
+    if any(decoded == 9 for decoded in overrides.values()):
+        decode_map = {
+            raw_code: decoded
+            for raw_code, decoded in decode_map.items()
+            if decoded != 9
+        }
+
+    decode_map.update(overrides)
+    return decode_map
+
+
 class MpdConnection:
     """Persistent MPD client wrapper with automatic reconnect."""
 
@@ -258,12 +282,16 @@ def main():
     stability_window = float(poll_cfg.get("switch_stability_window", 0.12))
     invalid_log_interval = float(poll_cfg.get("invalid_code_log_interval", 5.0))
 
-    bank_map_cfg = switch_cfg.get("bank_decode_map")
-    station_map_cfg = switch_cfg.get("station_decode_map")
-    bank_decode_map = normalize_code_map(bank_map_cfg, "switches.bank_decode_map") if bank_map_cfg is not None else None
-    station_decode_map = normalize_code_map(station_map_cfg, "switches.station_decode_map") if station_map_cfg is not None else None
-    bank_valid_raw_codes = set(bank_decode_map.keys()) if bank_decode_map is not None else set(range(bank_min, bank_max + 1))
-    station_valid_raw_codes = set(station_decode_map.keys()) if station_decode_map is not None else set(range(st_min, st_max + 1))
+    bank_decode_map = build_decode_map(
+        switch_cfg.get("bank_decode_map"),
+        "switches.bank_decode_map",
+    )
+    station_decode_map = build_decode_map(
+        switch_cfg.get("station_decode_map"),
+        "switches.station_decode_map",
+    )
+    bank_valid_raw_codes = set(bank_decode_map.keys())
+    station_valid_raw_codes = set(station_decode_map.keys())
     
     logger.info(f"Bank range: {bank_min}-{bank_max}")
     logger.info(f"Station range: {st_min}-{st_max}")
@@ -272,10 +300,8 @@ def main():
         f"Poll interval: {poll_interval}s, debounce: {debounce_time}s, "
         f"stability window: {stability_window}s"
     )
-    if bank_decode_map is not None:
-        logger.info(f"Bank decode map enabled with {len(bank_decode_map)} entries")
-    if station_decode_map is not None:
-        logger.info(f"Station decode map enabled with {len(station_decode_map)} entries")
+    logger.info(f"Bank decode map loaded with {len(bank_decode_map)} entries")
+    logger.info(f"Station decode map loaded with {len(station_decode_map)} entries")
     
     # Wait for MPD to be ready
     if not wait_for_mpd(logger=logger):
