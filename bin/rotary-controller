@@ -32,7 +32,7 @@ STATE_PATH = Path("/home/radio/.radio-state")
 STATIONS_PATH = Path("/home/radio/stations.yaml")
 
 # Hardware configuration
-BUTTON_PIN = 9  # Seesaw GPIO for volume encoder button
+BUTTON_PIN = 24  # Seesaw GPIO for volume encoder button
 MAX_JUMP = 8    # Max encoder delta per poll (glitch filter)
 I2C_ERR_BACKOFF = 0.2  # Seconds to wait after I2C error
 
@@ -198,7 +198,7 @@ def main():
     btn_cfg = cfg.get("buttons", {})
     poll_cfg = cfg.get("polling", {})
     
-    addr = parse_i2c_addr(i2c_cfg.get("volume_i2c_address", "0x49"))
+    addr = parse_i2c_addr(i2c_cfg.get("volume_i2c_address", "36"))
     logger.info(f"Volume encoder I2C address: 0x{addr:02x}")
     
     # GPIO pin mappings

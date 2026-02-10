@@ -1,6 +1,6 @@
 i2c:
   # Volume encoder still uses Seesaw I2C breakout
-  volume_i2c_address: 0x49
+  volume_i2c_address: 36
 
 switches:
   # Station selector switch (BCD rotary, 10 positions)
