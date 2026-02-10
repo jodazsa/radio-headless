@@ -49,7 +49,7 @@ sudo systemctl status rotary-controller
 sudo systemctl status mpd
 systemctl status radio-update-stations.timer
 
-# I2C encoder should typically appear at 0x49
+# I2C encoder should typically appear at 0x36
 i2cdetect -y 1
 
 # HiFiBerry/DAC detection
