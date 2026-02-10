@@ -18,6 +18,20 @@ switches:
     bit2: 13  # GPIO 13 (value 4)
     bit3: 11  # GPIO 11 (value 8)
 
+  # Optional raw-code decode maps (raw BCD 0-15 -> logical digit).
+  # Example below maps stable raw code 12 to logical bank 9.
+  bank_decode_map:
+    0: 0
+    1: 1
+    2: 2
+    3: 3
+    4: 4
+    5: 5
+    6: 6
+    7: 7
+    8: 8
+    12: 9
+
 encoders:
   volume_encoder: 0  # Only one encoder for volume
 
@@ -39,6 +53,12 @@ polling:
   
   # Debounce: ignore changes faster than this (seconds)
   switch_debounce: 0.05
+
+  # Require decoded value to remain unchanged for this long before accepting.
+  switch_stability_window: 0.12
+
+  # Rate-limit invalid raw code warnings.
+  invalid_code_log_interval: 5.0
 
 auto_update:
   # Automatically update stations.yaml from GitHub
