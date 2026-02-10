@@ -44,7 +44,7 @@ This is a variant of the radio-headless project that uses **BCD rotary switches*
 - SCL: GPIO 3 (Pin 5)
 - VCC: 3.3V
 - GND: Ground
-- I2C Address: 0x49
+- I2C Address: 0x36
 
 ## Installation
 
@@ -102,7 +102,7 @@ sudo systemctl status mpd
 
 # Check I2C
 i2cdetect -y 1
-# Should show 0x49 (volume encoder)
+# Should show 0x36 (volume encoder)
 
 # Check HiFiBerry MiniAmp is detected by ALSA
 aplay -l
@@ -203,7 +203,7 @@ Check switch wiring matches configuration in `hardware-rotary.yaml`
 ```bash
 # Check I2C
 i2cdetect -y 1
-# Should show 0x49
+# Should show 0x36
 
 # Test encoder directly
 sudo -u radio /usr/local/bin/rotary-controller

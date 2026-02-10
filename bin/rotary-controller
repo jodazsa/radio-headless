@@ -257,7 +257,7 @@ def main():
     btn_cfg = cfg.get("buttons", {})
     poll_cfg = cfg.get("polling", {})
     
-    addr = parse_i2c_addr(i2c_cfg.get("volume_i2c_address", "36"))
+    addr = parse_i2c_addr(i2c_cfg.get("volume_i2c_address", "0x36"))
     logger.info(f"Volume encoder I2C address: 0x{addr:02x}")
     
     # GPIO pin mappings

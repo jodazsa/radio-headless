@@ -62,7 +62,7 @@ def parse_i2c_addr(v: Any) -> int:
     """Parse I2C address from various formats.
     
     Args:
-        v: Address as int (0x49), hex string ("0x49"), or decimal string ("73")
+        v: Address as int (0x36), hex string ("0x36"), or decimal string ("54")
         
     Returns:
         Integer I2C address
@@ -71,12 +71,12 @@ def parse_i2c_addr(v: Any) -> int:
         TypeError: If v is not a supported type
         
     Examples:
-        >>> parse_i2c_addr(0x49)
-        73
-        >>> parse_i2c_addr("0x49")
-        73
-        >>> parse_i2c_addr("73")
-        73
+        >>> parse_i2c_addr(0x36)
+        54
+        >>> parse_i2c_addr("0x36")
+        54
+        >>> parse_i2c_addr("54")
+        54
     """
     if isinstance(v, int):
         return v
