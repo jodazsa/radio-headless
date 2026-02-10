@@ -23,6 +23,10 @@ switches:
   # If your selector advances out-of-order, add only the remaps you need.
   #
   bank_decode_map:
+    1: 4
+    3: 6
+    4: 1
+    6: 3
     12: 9
   #
   # station_decode_map:
