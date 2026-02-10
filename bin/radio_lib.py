@@ -287,6 +287,24 @@ def _validate_rotary_config(cfg: Dict[str, Any]) -> List[str]:
                 if not isinstance(pin, int):
                     errors.append(f"switches.{sw_name}.{bit} must be an integer GPIO pin")
 
+        for map_name in ("bank_decode_map", "station_decode_map"):
+            decode_map = switches.get(map_name)
+            if decode_map is None:
+                continue
+            if not isinstance(decode_map, dict):
+                errors.append(f"switches.{map_name} must be a mapping of raw_code->decoded_digit")
+                continue
+            for raw_code, decoded in decode_map.items():
+                if not isinstance(raw_code, int):
+                    errors.append(f"switches.{map_name} key {raw_code!r} must be an integer")
+                elif raw_code < 0 or raw_code > 15:
+                    errors.append(f"switches.{map_name} key {raw_code!r} must be in range 0-15")
+
+                if not isinstance(decoded, int):
+                    errors.append(f"switches.{map_name}[{raw_code!r}] must be an integer")
+                elif decoded < 0 or decoded > 9:
+                    errors.append(f"switches.{map_name}[{raw_code!r}] must be in range 0-9")
+
     encoders = cfg.get("encoders")
     if not isinstance(encoders, dict):
         errors.append("Missing or invalid 'encoders' section (must be a mapping)")
@@ -334,12 +352,20 @@ def _validate_rotary_config(cfg: Dict[str, Any]) -> List[str]:
     else:
         poll_interval = polling.get("switch_poll_interval")
         debounce = polling.get("switch_debounce")
+        stability_window = polling.get("switch_stability_window", 0.12)
+        invalid_log_interval = polling.get("invalid_code_log_interval", 5.0)
 
         if not isinstance(poll_interval, (int, float)) or poll_interval <= 0:
             errors.append("polling.switch_poll_interval must be a number > 0")
 
         if not isinstance(debounce, (int, float)) or debounce < 0:
             errors.append("polling.switch_debounce must be a number >= 0")
+
+        if not isinstance(stability_window, (int, float)) or stability_window < 0:
+            errors.append("polling.switch_stability_window must be a number >= 0")
+
+        if not isinstance(invalid_log_interval, (int, float)) or invalid_log_interval < 0:
+            errors.append("polling.invalid_code_log_interval must be a number >= 0")
 
     return errors
 

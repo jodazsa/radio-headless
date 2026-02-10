@@ -6,6 +6,7 @@ encoder for volume control. No display output.
 """
 import time
 from pathlib import Path
+from typing import Dict, Optional
 
 import board
 import busio
@@ -38,6 +39,40 @@ I2C_ERR_BACKOFF = 0.2  # Seconds to wait after I2C error
 
 # Setup logging
 logger = setup_logging('rotary-controller', Path('/home/radio/logs/rotary.log'))
+
+
+def decode_switch(
+    raw: int,
+    last_valid: int,
+    code_map: Optional[Dict[int, int]] = None,
+    min_v: int = 0,
+    max_v: int = 9,
+) -> int:
+    """Decode a raw 4-bit switch value into a digit, holding last valid on invalid input."""
+    if code_map is not None:
+        decoded = code_map.get(raw, last_valid)
+        if min_v <= decoded <= max_v:
+            return decoded
+        return last_valid
+    if min_v <= raw <= max_v:
+        return raw
+    return last_valid
+
+
+def normalize_code_map(raw_map: object, name: str) -> Dict[int, int]:
+    """Normalize YAML decode map values to int->int mapping."""
+    if not isinstance(raw_map, dict):
+        raise ValueError(f"{name} must be a mapping")
+
+    normalized = {}
+    for raw_code, decoded in raw_map.items():
+        try:
+            raw_int = int(raw_code)
+            decoded_int = int(decoded)
+        except (TypeError, ValueError) as err:
+            raise ValueError(f"{name} contains non-integer key/value ({raw_code!r}:{decoded!r})") from err
+        normalized[raw_int] = decoded_int
+    return normalized
 
 
 class MpdConnection:
@@ -220,11 +255,27 @@ def main():
     # Polling configuration
     poll_interval = float(poll_cfg.get("switch_poll_interval", 0.1))
     debounce_time = float(poll_cfg.get("switch_debounce", 0.05))
+    stability_window = float(poll_cfg.get("switch_stability_window", 0.12))
+    invalid_log_interval = float(poll_cfg.get("invalid_code_log_interval", 5.0))
+
+    bank_map_cfg = switch_cfg.get("bank_decode_map")
+    station_map_cfg = switch_cfg.get("station_decode_map")
+    bank_decode_map = normalize_code_map(bank_map_cfg, "switches.bank_decode_map") if bank_map_cfg is not None else None
+    station_decode_map = normalize_code_map(station_map_cfg, "switches.station_decode_map") if station_map_cfg is not None else None
+    bank_valid_raw_codes = set(bank_decode_map.keys()) if bank_decode_map is not None else set(range(bank_min, bank_max + 1))
+    station_valid_raw_codes = set(station_decode_map.keys()) if station_decode_map is not None else set(range(st_min, st_max + 1))
     
     logger.info(f"Bank range: {bank_min}-{bank_max}")
     logger.info(f"Station range: {st_min}-{st_max}")
     logger.info(f"Volume range: {vmin}-{vmax}, step: {vstep}")
-    logger.info(f"Poll interval: {poll_interval}s, debounce: {debounce_time}s")
+    logger.info(
+        f"Poll interval: {poll_interval}s, debounce: {debounce_time}s, "
+        f"stability window: {stability_window}s"
+    )
+    if bank_decode_map is not None:
+        logger.info(f"Bank decode map enabled with {len(bank_decode_map)} entries")
+    if station_decode_map is not None:
+        logger.info(f"Station decode map enabled with {len(station_decode_map)} entries")
     
     # Wait for MPD to be ready
     if not wait_for_mpd(logger=logger):
@@ -276,9 +327,16 @@ def main():
     # Track restart count
     restart_count = int(st.get("rotary_restarts", "0")) + 1
     
-    # Read initial switch positions
-    cur_bank = clamp(read_bcd_switch(bank_pins), bank_min, bank_max)
-    cur_station = clamp(read_bcd_switch(station_pins), st_min, st_max)
+    # Read initial switch positions (invalid raw values keep last known-good state)
+    persisted_bank = int(st.get("current_bank", str(bank_min)))
+    persisted_station = int(st.get("current_station", str(st_min)))
+    cur_bank = persisted_bank if bank_min <= persisted_bank <= bank_max else bank_min
+    cur_station = persisted_station if st_min <= persisted_station <= st_max else st_min
+
+    bank_raw = read_bcd_switch(bank_pins)
+    station_raw = read_bcd_switch(station_pins)
+    cur_bank = decode_switch(bank_raw, cur_bank, bank_decode_map, bank_min, bank_max)
+    cur_station = decode_switch(station_raw, cur_station, station_decode_map, st_min, st_max)
 
     # Track last station we requested from radio-play.
     # Start from persisted state so switch bounce that settles back to the
@@ -302,6 +360,12 @@ def main():
     
     # Debounce tracking
     last_switch_change = 0.0
+    bank_candidate = cur_bank
+    station_candidate = cur_station
+    bank_candidate_since = 0.0
+    station_candidate_since = 0.0
+    last_invalid_bank_log = 0.0
+    last_invalid_station_log = 0.0
     
     logger.info("Entering main loop")
 
@@ -311,12 +375,51 @@ def main():
     while True:
         try:
             # Read current switch positions
-            bank = clamp(read_bcd_switch(bank_pins), bank_min, bank_max)
-            station = clamp(read_bcd_switch(station_pins), st_min, st_max)
+            bank_raw = read_bcd_switch(bank_pins)
+            station_raw = read_bcd_switch(station_pins)
+            bank = decode_switch(bank_raw, cur_bank, bank_decode_map, bank_min, bank_max)
+            station = decode_switch(station_raw, cur_station, station_decode_map, st_min, st_max)
+
+            now = time.monotonic()
+
+            if bank == cur_bank and bank_raw not in bank_valid_raw_codes:
+                if now - last_invalid_bank_log >= invalid_log_interval:
+                    logger.warning(
+                        f"Invalid BANK raw code ignored: raw={bank_raw}, keeping decoded={cur_bank}"
+                    )
+                    last_invalid_bank_log = now
+            if station == cur_station and station_raw not in station_valid_raw_codes:
+                if now - last_invalid_station_log >= invalid_log_interval:
+                    logger.warning(
+                        f"Invalid STATION raw code ignored: raw={station_raw}, keeping decoded={cur_station}"
+                    )
+                    last_invalid_station_log = now
+
+            # Stability filter: require stable identical decoded value before acceptance.
+            accepted_bank = cur_bank
+            if bank != cur_bank:
+                if bank != bank_candidate:
+                    bank_candidate = bank
+                    bank_candidate_since = now
+                elif now - bank_candidate_since >= stability_window:
+                    accepted_bank = bank
+            else:
+                bank_candidate = cur_bank
+                bank_candidate_since = now
+
+            accepted_station = cur_station
+            if station != cur_station:
+                if station != station_candidate:
+                    station_candidate = station
+                    station_candidate_since = now
+                elif now - station_candidate_since >= stability_window:
+                    accepted_station = station
+            else:
+                station_candidate = cur_station
+                station_candidate_since = now
             
             # Check if switches changed (with debouncing)
-            if (bank != cur_bank or station != cur_station):
-                now = time.monotonic()
+            if (accepted_bank != cur_bank or accepted_station != cur_station):
                 
                 # Debounce: ignore rapid changes
                 if now - last_switch_change < debounce_time:
@@ -326,13 +429,17 @@ def main():
                 last_switch_change = now
                 
                 # Log the change
-                if bank != cur_bank:
-                    logger.info(f"Bank switch changed: {cur_bank} → {bank}")
-                if station != cur_station:
-                    logger.info(f"Station switch changed: {cur_station} → {station}")
+                if accepted_bank != cur_bank:
+                    logger.info(
+                        f"Bank switch changed: {cur_bank} → {accepted_bank} (raw={bank_raw})"
+                    )
+                if accepted_station != cur_station:
+                    logger.info(
+                        f"Station switch changed: {cur_station} → {accepted_station} (raw={station_raw})"
+                    )
                 
-                cur_bank = bank
-                cur_station = station
+                cur_bank = accepted_bank
+                cur_station = accepted_station
                 
                 # Save state
                 write_state(STATE_PATH, current_bank=cur_bank, current_station=cur_station)
