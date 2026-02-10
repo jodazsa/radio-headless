@@ -19,26 +19,17 @@ switches:
     bit3: 11  # GPIO 11 (value 8)
 
   # Optional raw-code decode map overrides (raw BCD 0-15 -> logical digit).
-  # Keep these device-specific; tune from observed raw-code sequences in logs.
+  # Leave these unset when your logs already show raw=logical position.
+  # If your selector advances out-of-order, add only the remaps you need.
+  #
   bank_decode_map:
-    1: 4
-    3: 6
-    4: 1
-    6: 3
-
-  station_decode_map:
-    1: 2
-    2: 1
-    5: 6
-    6: 5
-    9: 9
-    10: 9
-
-  station_decode_map:
-    1: 2
-    2: 1
-    5: 6
-    6: 5
+    12: 9
+  #
+  # station_decode_map:
+  #   1: 2
+  #   2: 1
+  #   5: 6
+  #   6: 5
 
 encoders:
   volume_encoder: 0  # Only one encoder for volume
