@@ -6,8 +6,8 @@ switches:
   # Station selector switch (BCD rotary, 10 positions)
   # Reads binary pattern from 4 GPIO pins
   station_switch:
-    bit0: 10  # GPIO 10 (value 1)
-    bit1: 9   # GPIO 9  (value 2)
+    bit0: 9   # GPIO 9  (value 1)
+    bit1: 10  # GPIO 10 (value 2)
     bit2: 22  # GPIO 22 (value 4)
     bit3: 17  # GPIO 17 (value 8)
   
@@ -21,7 +21,18 @@ switches:
   # Optional raw-code decode map overrides (raw BCD 0-15 -> logical digit).
   # Keep these device-specific; tune from observed raw-code sequences in logs.
   bank_decode_map:
-    12: 9
+    1: 4
+    3: 6
+    4: 1
+    6: 3
+
+  station_decode_map:
+    1: 2
+    2: 1
+    5: 6
+    6: 5
+    9: 9
+    10: 9
 
   station_decode_map:
     1: 2

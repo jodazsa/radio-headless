@@ -91,6 +91,61 @@ cd ~/radio-headless
 ./deploy-rotary.sh
 ```
 
+### Pull a specific fix onto an already-running Raspberry Pi
+
+Use this when you pushed a repo fix (for example, a knob rotation sequence fix) and want that exact update running on the Pi.
+
+```bash
+# 1) SSH into your Pi
+ssh <pi-user>@<pi-hostname-or-ip>
+
+# 2) Go to the installed repo
+cd ~/radio-headless
+
+# 3) Confirm branch and local state
+git status -sb
+git branch --show-current
+
+# 4) Pull latest changes from origin
+git fetch origin
+git pull --ff-only origin main
+
+# 5) Re-deploy scripts/services from this repo copy
+./deploy-rotary.sh
+```
+
+If `git pull --ff-only` fails because local files were edited on the Pi:
+
+```bash
+# Option A: keep local edits temporarily
+git stash push -u -m "pi-local-changes"
+git pull --ff-only origin main
+./deploy-rotary.sh
+
+# Option B: discard local edits (destructive)
+# git reset --hard HEAD
+# git clean -fd
+# git pull --ff-only origin main
+# ./deploy-rotary.sh
+```
+
+Validate that the fix is active:
+
+```bash
+# show the latest deployed commit
+git log -1 --oneline
+
+# confirm rotary service is running new code
+sudo systemctl status rotary-controller --no-pager
+tail -n 80 /home/radio/logs/rotary.log
+```
+
+Tip: if behavior still matches the old version, reboot once after deploy:
+
+```bash
+sudo reboot
+```
+
 ### Check current service state
 
 ```bash
@@ -114,4 +169,3 @@ sudo journalctl -u radio-update-stations.service -f
 - `docs/ROTARY-README.md` – rotary-switch variant behavior and wiring
 - `docs/MUSIC-TRANSFER.md` – loading offline music content
 - `docs/AUTO-UPDATE.md` – update automation details
-
