@@ -24,6 +24,10 @@ Why this matters:
 ### Bring This Repo Up on a Fresh System
 
 ```bash
+# 0) Install git
+sudo apt-get update
+sudo apt-get install -y git
+
 # 1) Get code
 cd ~
 git clone https://github.com/jodazsa/radio-headless.git
