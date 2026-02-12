@@ -499,7 +499,7 @@ def main():
             
             # Handle volume change
             if vol_pos != last_vol_pos:
-                delta = vol_pos - last_vol_pos
+                delta = last_vol_pos - vol_pos
                 last_vol_pos = vol_pos
                 
                 # Get current MPD volume
