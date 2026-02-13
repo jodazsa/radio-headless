@@ -120,7 +120,7 @@ sudo cp etc/mpd.conf /etc/mpd.conf
 # Copy web backend and UI
 sudo mkdir -p /home/radio/radio-headless/web
 sudo cp web/pi_backend.py /home/radio/radio-headless/web/
-sudo cp web/pi-music-controller.html /home/radio/radio-headless/web/
+sudo cp web/radio.html /home/radio/radio-headless/web/
 sudo chown -R radio:radio /home/radio/radio-headless/web
 
 # Copy systemd service (rotary + update timer + web backend)

@@ -18,7 +18,7 @@ No SSH hop is required.
 These files are included in this repo:
 
 - `web/pi_backend.py`
-- `web/pi-music-controller.html`
+- `web/radio.html`
 - `systemd/radio-web-backend.service`
 
 On the Pi:

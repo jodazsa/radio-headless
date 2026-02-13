@@ -32,7 +32,7 @@ sudo cp etc/mpd.conf /etc/mpd.conf
 echo "→ Updating web backend + UI..."
 sudo mkdir -p /home/radio/radio-headless/web
 sudo cp web/pi_backend.py /home/radio/radio-headless/web/
-sudo cp web/pi-music-controller.html /home/radio/radio-headless/web/
+sudo cp web/radio.html /home/radio/radio-headless/web/
 sudo chown -R radio:radio /home/radio/radio-headless/web
 
 # 6. Update systemd service

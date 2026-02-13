@@ -22,7 +22,7 @@ BIND_PORT = int(os.getenv("BIND_PORT", "8080"))
 RADIO_PLAY_CMD = os.getenv("RADIO_PLAY_CMD", "radio-play")
 STATE_FILE = os.getenv("RADIO_STATE_FILE", "/home/radio/.radio-state")
 WEB_ROOT = Path(os.getenv("WEB_ROOT", Path(__file__).resolve().parent))
-DEFAULT_PAGE = os.getenv("WEB_DEFAULT_PAGE", "pi-music-controller.html")
+DEFAULT_PAGE = os.getenv("WEB_DEFAULT_PAGE", "radio.html")
 
 ALLOWED_COMMANDS = [
     r"^mpc\s+(play|pause|stop|next|prev|volume\s+\d{1,3})$",
