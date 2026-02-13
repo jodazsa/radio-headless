@@ -79,6 +79,7 @@ This repository configures a **headless Raspberry Pi radio** with:
 - `systemd/` – service/timer unit files
 - `etc/mpd.conf` – MPD configuration
 - `docs/` – usage guides and maintenance notes
+- `web/` – local browser UI and SSH backend for remote control
 
 ---
 
@@ -169,3 +170,4 @@ sudo journalctl -u radio-update-stations.service -f
 - `docs/ROTARY-README.md` – rotary-switch variant behavior and wiring
 - `docs/MUSIC-TRANSFER.md` – loading offline music content
 - `docs/AUTO-UPDATE.md` – update automation details
+- `docs/WEB-CONTROL.md` – run a local web backend and browser UI to control the Pi over SSH

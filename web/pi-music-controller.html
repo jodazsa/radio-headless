@@ -1,0 +1,138 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Pi Music Controller</title>
+  <style>
+    body { font-family: sans-serif; max-width: 760px; margin: 24px auto; padding: 0 12px; }
+    .row { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 10px; align-items: center; }
+    button { padding: 8px 12px; cursor: pointer; }
+    input { padding: 8px; }
+    .card { border: 1px solid #ddd; border-radius: 8px; padding: 12px; margin-bottom: 12px; }
+    pre { background: #111; color: #9f9; padding: 10px; border-radius: 6px; min-height: 80px; overflow-x: auto; }
+    label { display: inline-block; min-width: 90px; }
+  </style>
+</head>
+<body>
+  <h1>Pi Music Controller</h1>
+  <p>Run <code>web/pi_backend.py</code> on the Pi, then use this page from any browser on your network.</p>
+
+  <div class="card">
+    <div class="row">
+      <label for="backendUrl">Backend URL</label>
+      <input id="backendUrl" style="min-width: 340px" />
+      <button onclick="loadConfig()">Load Config</button>
+      <button onclick="refreshAll()">Refresh</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3>Playback</h3>
+    <div class="row">
+      <button onclick="sendCommand('mpc play')">Play</button>
+      <button onclick="sendCommand('mpc pause')">Pause</button>
+      <button onclick="sendCommand('mpc stop')">Stop</button>
+      <button onclick="sendCommand('mpc next')">Next</button>
+      <button onclick="sendCommand('mpc prev')">Prev</button>
+    </div>
+    <div class="row">
+      <label for="volume">Volume</label>
+      <input id="volume" type="number" min="0" max="100" value="50" />
+      <button onclick="setVolume()">Set Volume</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3>Station Select</h3>
+    <div class="row">
+      <label for="bank">Bank</label>
+      <input id="bank" type="number" min="0" value="0" />
+      <label for="station">Station</label>
+      <input id="station" type="number" min="0" value="0" />
+      <button onclick="playStation()">Play Station</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3>Status</h3>
+    <div id="statusText">(click Refresh)</div>
+  </div>
+
+  <div class="card">
+    <h3>Response Log</h3>
+    <pre id="log"></pre>
+  </div>
+
+<script>
+const byId = (id) => document.getElementById(id);
+
+function defaultBackendUrl() {
+  if (window.location.protocol.startsWith('http')) {
+    return `${window.location.protocol}//${window.location.hostname}:8080`;
+  }
+  return 'http://raspberrypi.local:8080';
+}
+
+function apiBase() {
+  return byId('backendUrl').value.trim().replace(/\/$/, '');
+}
+
+function log(data) {
+  byId('log').textContent = `${new Date().toLocaleTimeString()}\n${JSON.stringify(data, null, 2)}`;
+}
+
+async function post(path, body = {}) {
+  const res = await fetch(`${apiBase()}${path}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  return res.json();
+}
+
+async function loadConfig() {
+  const res = await fetch(`${apiBase()}/config`);
+  const data = await res.json();
+  log(data);
+}
+
+async function sendCommand(command) {
+  const data = await post('/command', { command });
+  log(data);
+  await refreshAll();
+}
+
+async function setVolume() {
+  const v = Math.max(0, Math.min(100, Number(byId('volume').value || 0)));
+  await sendCommand(`mpc volume ${v}`);
+}
+
+async function playStation() {
+  const bank = Number(byId('bank').value || 0);
+  const station = Number(byId('station').value || 0);
+  await sendCommand(`radio-play ${bank} ${station}`);
+}
+
+async function refreshAll() {
+  const [status, state] = await Promise.all([
+    post('/status', {}),
+    post('/state', {}),
+  ]);
+
+  byId('statusText').textContent = [
+    `Track: ${status.current_track || '(none)'}`,
+    `Playing: ${status.is_playing ? 'yes' : 'no'}`,
+    `Paused: ${status.is_paused ? 'yes' : 'no'}`,
+    `Volume: ${status.volume ?? '?'}`,
+    `Bank/Station: ${state.bank ?? '?'} / ${state.station ?? '?'}`,
+    `Names: ${state.bank_name || '-'} / ${state.station_name || '-'}`,
+    `Playback State: ${state.playback_state || '-'}`,
+  ].join('\n');
+}
+
+byId('backendUrl').value = defaultBackendUrl();
+loadConfig().then(refreshAll).catch((err) => log({ success: false, error: String(err) }));
+</script>
+</body>
+</html>
