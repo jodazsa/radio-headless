@@ -248,7 +248,7 @@ def main():
     if not STATIONS_PATH.exists():
         die(f"{STATIONS_PATH} not found")
     data = load_yaml(STATIONS_PATH)
-    _bank, station = get_station(data, bank_id, station_id)
+    bank, station = get_station(data, bank_id, station_id)
 
     stype = normalize_type(station.get("type", ""))
     name = station.get("name", f"Bank {bank_id} Station {station_id}")
@@ -257,8 +257,16 @@ def main():
     path = station.get("path") or station.get("file")
     directory = station.get("directory") or station.get("dir")
 
+    bank_name = bank.get("name", f"Bank {bank_id}")
+
     # Save state
-    write_state(STATE_PATH, current_bank=bank_id, current_station=station_id)
+    write_state(
+        STATE_PATH,
+        current_bank=bank_id,
+        current_station=station_id,
+        bank_name=bank_name,
+        station_name=name,
+    )
     
     logger.info(f"Playing: '{name}' (type={stype})")
 
