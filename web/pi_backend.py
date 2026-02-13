@@ -17,6 +17,8 @@ import shlex
 import subprocess
 from typing import Any
 
+import yaml
+
 BIND_HOST = os.getenv("BIND_HOST", "0.0.0.0")
 BIND_PORT = int(os.getenv("BIND_PORT", "8080"))
 RADIO_PLAY_CMD = os.getenv("RADIO_PLAY_CMD", "radio-play")
@@ -26,6 +28,7 @@ DEFAULT_PAGE = os.getenv("WEB_DEFAULT_PAGE", "radio.html")
 SETUP_PAGE = os.getenv("WEB_SETUP_PAGE", "setup.html")
 SETUP_MARKER_FILE = Path(os.getenv("RADIO_SETUP_MARKER_FILE", "/var/lib/radio/setup-mode"))
 SETUP_APPLY_CMD = os.getenv("RADIO_SETUP_APPLY_CMD", "/usr/bin/sudo /usr/local/lib/radio/apply-network-config")
+STATIONS_FILE = Path(os.getenv("RADIO_STATIONS_FILE", "/home/radio/stations.yaml"))
 
 ALLOWED_COMMANDS = [
     r"^mpc\s+(play|pause|stop|next|prev|volume\s+\d{1,3})$",
@@ -33,6 +36,31 @@ ALLOWED_COMMANDS = [
 ]
 
 HOSTNAME_PATTERN = re.compile(r"^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$")
+
+
+def _lookup_station_names(bank: int, station: int) -> tuple[str, str]:
+    try:
+        data = yaml.safe_load(STATIONS_FILE.read_text(encoding="utf-8")) or {}
+    except (FileNotFoundError, OSError, yaml.YAMLError):
+        return "", ""
+
+    banks = data.get("banks", {})
+    if not isinstance(banks, dict):
+        return "", ""
+
+    bank_data = banks.get(bank)
+    if not isinstance(bank_data, dict):
+        return "", ""
+
+    stations = bank_data.get("stations", {})
+    if not isinstance(stations, dict):
+        return str(bank_data.get("name", "") or ""), ""
+
+    station_data = stations.get(station)
+    if not isinstance(station_data, dict):
+        return str(bank_data.get("name", "") or ""), ""
+
+    return str(bank_data.get("name", "") or ""), str(station_data.get("name", "") or "")
 
 
 def is_command_allowed(command: str) -> bool:
@@ -359,14 +387,26 @@ class CommandHandler(BaseHTTPRequestHandler):
             bank = 0
             station = 0
 
+        bank = max(0, bank)
+        station = max(0, station)
+
+        bank_name = parsed.get("bank_name", "")
+        station_name = parsed.get("station_name", "")
+        if not bank_name or not station_name:
+            looked_up_bank_name, looked_up_station_name = _lookup_station_names(bank, station)
+            if not bank_name:
+                bank_name = looked_up_bank_name
+            if not station_name:
+                station_name = looked_up_station_name
+
         self.send_json_response(
             200,
             {
                 "success": True,
-                "bank": max(0, bank),
-                "station": max(0, station),
-                "bank_name": parsed.get("bank_name", ""),
-                "station_name": parsed.get("station_name", ""),
+                "bank": bank,
+                "station": station,
+                "bank_name": bank_name,
+                "station_name": station_name,
                 "playback_state": parsed.get("playback_state", "stopped"),
             },
         )
