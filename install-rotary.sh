@@ -128,14 +128,28 @@ sudo cp systemd/rotary-controller.service /etc/systemd/system/
 sudo cp systemd/radio-update-stations.service /etc/systemd/system/
 sudo cp systemd/radio-update-stations.timer /etc/systemd/system/
 sudo cp systemd/radio-web-backend.service /etc/systemd/system/
+
+# Install backend override env file if missing (QoL for custom port/paths)
+if [ ! -f /etc/default/radio-web-backend ]; then
+sudo tee /etc/default/radio-web-backend >/dev/null <<'EOF'
+# Optional overrides for radio-web-backend.service
+#BIND_HOST=0.0.0.0
+#BIND_PORT=8080
+#RADIO_PLAY_CMD=/usr/local/bin/radio-play
+#RADIO_STATE_FILE=/home/radio/.radio-state
+#WEB_ROOT=/home/radio/radio-headless/web
+#WEB_DEFAULT_PAGE=radio.html
+EOF
+fi
+
 sudo systemctl daemon-reload
 
 # 8. Enable services
 echo "→ Enabling services..."
 sudo systemctl enable rotary-controller.service
 sudo systemctl enable mpd.service
-sudo systemctl enable radio-update-stations.timer
-sudo systemctl enable radio-web-backend.service
+sudo systemctl enable --now radio-update-stations.timer
+sudo systemctl enable --now radio-web-backend.service
 
 # 9. Verify I2C hardware detection
 echo ""
