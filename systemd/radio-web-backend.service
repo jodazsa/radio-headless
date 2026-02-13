@@ -13,7 +13,9 @@ Environment=RADIO_PLAY_CMD=/usr/local/bin/radio-play
 Environment=RADIO_STATE_FILE=/home/radio/.radio-state
 Environment=WEB_ROOT=/home/radio/radio-headless/web
 Environment=WEB_DEFAULT_PAGE=radio.html
-EnvironmentFile=-/etc/default/radio-web-backend
+Environment=WEB_SETUP_PAGE=setup.html
+Environment=RADIO_SETUP_MARKER_FILE=/var/lib/radio/setup-mode
+Environment="RADIO_SETUP_APPLY_CMD=/usr/bin/sudo /usr/local/lib/radio/apply-network-config"
 ExecStart=/usr/bin/python3 /home/radio/radio-headless/web/pi_backend.py
 Restart=always
 RestartSec=2

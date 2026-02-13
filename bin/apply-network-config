@@ -1,0 +1,64 @@
+#!/bin/bash
+set -euo pipefail
+
+if [[ "${EUID}" -ne 0 ]]; then
+  echo '{"success":false,"error":"must run as root"}'
+  exit 1
+fi
+
+PAYLOAD="$(cat)"
+
+readarray -t FIELDS < <(python3 - <<'PY' "$PAYLOAD"
+import json
+import re
+import sys
+
+payload = json.loads(sys.argv[1])
+ssid = str(payload.get("ssid", "")).strip()
+password = str(payload.get("password", ""))
+hostname = str(payload.get("hostname", "")).strip().lower()
+
+if not ssid or len(ssid) > 32:
+    raise SystemExit("invalid_ssid")
+if len(password) < 8 or len(password) > 63:
+    raise SystemExit("invalid_password")
+if not re.match(r"^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$", hostname):
+    raise SystemExit("invalid_hostname")
+
+print(ssid)
+print(password)
+print(hostname)
+PY
+)
+
+SSID="${FIELDS[0]}"
+PASSWORD="${FIELDS[1]}"
+HOSTNAME="${FIELDS[2]}"
+
+if ! command -v nmcli >/dev/null 2>&1; then
+  echo '{"success":false,"error":"nmcli not found"}'
+  exit 1
+fi
+
+if ! command -v hostnamectl >/dev/null 2>&1; then
+  echo '{"success":false,"error":"hostnamectl not found"}'
+  exit 1
+fi
+
+CONN_NAME="radio-managed-${SSID// /-}"
+
+nmcli connection delete "$CONN_NAME" >/dev/null 2>&1 || true
+nmcli connection add type wifi ifname wlan0 con-name "$CONN_NAME" ssid "$SSID" >/dev/null
+nmcli connection modify "$CONN_NAME" wifi-sec.key-mgmt wpa-psk wifi-sec.psk "$PASSWORD" >/dev/null
+
+hostnamectl set-hostname "$HOSTNAME"
+
+if grep -q '^127.0.1.1' /etc/hosts; then
+  sed -i "s/^127\.0\.1\.1.*/127.0.1.1\t${HOSTNAME}/" /etc/hosts
+else
+  printf '127.0.1.1\t%s\n' "$HOSTNAME" >> /etc/hosts
+fi
+
+nmcli connection up "$CONN_NAME" >/dev/null || true
+
+echo '{"success":true,"message":"Settings applied. Reconnecting to Wi-Fi now."}'

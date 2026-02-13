@@ -121,7 +121,18 @@ sudo cp etc/mpd.conf /etc/mpd.conf
 sudo mkdir -p /home/radio/radio-headless/web
 sudo cp web/pi_backend.py /home/radio/radio-headless/web/
 sudo cp web/radio.html /home/radio/radio-headless/web/
+sudo cp web/setup.html /home/radio/radio-headless/web/
 sudo chown -R radio:radio /home/radio/radio-headless/web
+
+
+# Install privileged setup helper + sudoers policy
+sudo mkdir -p /usr/local/lib/radio
+sudo cp bin/apply-network-config /usr/local/lib/radio/apply-network-config
+sudo chown root:root /usr/local/lib/radio/apply-network-config
+sudo chmod 750 /usr/local/lib/radio/apply-network-config
+sudo cp etc/sudoers.d/radio-provisioning /etc/sudoers.d/radio-provisioning
+sudo chown root:root /etc/sudoers.d/radio-provisioning
+sudo chmod 440 /etc/sudoers.d/radio-provisioning
 
 # Copy systemd service (rotary + update timer + web backend)
 sudo cp systemd/rotary-controller.service /etc/systemd/system/
