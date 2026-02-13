@@ -465,7 +465,7 @@
                 <span class="indicator-dot"></span>
                 <span class="indicator-text">CONNECTING...</span>
             </div>
-            <div class="station-info" id="stationInfo">BANK 1 / ST 1</div>
+            <div class="station-info" id="stationInfo">Bank:  1 - Station:  1</div>
             <div class="station-display" id="stationDisplay">READY</div>
             <div class="status-display" id="status"></div>
         </div>
@@ -542,6 +542,8 @@
         // Current selection
         let currentBank = 1;
         let currentStation = 1;
+        let currentBankName = '';
+        let currentStationName = '';
         
         // Favorites storage (localStorage)
         let favorites = {};
@@ -694,12 +696,16 @@
         
         function setBank(bank) {
             currentBank = bank;
+            currentBankName = '';
+            currentStationName = '';
             updateKeypadHighlights();
             debouncedPlayStation();
         }
         
         function setStation(station) {
             currentStation = station;
+            currentBankName = '';
+            currentStationName = '';
             updateKeypadHighlights();
             debouncedPlayStation();
         }
@@ -729,7 +735,9 @@
         }
         
         function updateStationInfo() {
-            document.getElementById('stationInfo').textContent = `BANK ${currentBank} / ST ${currentStation}`;
+            const bankLabel = currentBankName || `${currentBank}`;
+            const stationLabel = currentStationName || `${currentStation}`;
+            document.getElementById('stationInfo').textContent = `Bank:  ${bankLabel} - Station:  ${stationLabel}`;
         }
         
         function playCurrentStation() {
@@ -742,9 +750,12 @@
             // Update internal state to show 1-10
             currentBank = bank + 1;
             currentStation = station + 1;
+            currentBankName = '';
+            currentStationName = '';
             updateStationInfo();
             updateKeypadHighlights();
             sendCommand(`radio-play ${bank} ${station}`);
+            setTimeout(fetchRadioState, 350);
         }
         
         function updateStationDisplay(text) {
@@ -792,6 +803,8 @@
                     // State file uses 0-9, UI uses 1-10
                     currentBank = data.bank + 1;
                     currentStation = data.station + 1;
+                    currentBankName = data.bank_name || '';
+                    currentStationName = data.station_name || '';
                     updateStationInfo();
                     updateKeypadHighlights();
                 }
