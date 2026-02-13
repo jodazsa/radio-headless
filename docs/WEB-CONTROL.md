@@ -105,6 +105,14 @@ Logs:
 sudo journalctl -u radio-web-backend.service -f
 ```
 
+The install/deploy scripts now create `/etc/default/radio-web-backend` (if missing) so you can tweak host/port/path settings without editing the unit file:
+
+```bash
+sudo nano /etc/default/radio-web-backend
+sudo systemctl restart radio-web-backend.service
+```
+
+
 ---
 
 ## 5) Troubleshooting

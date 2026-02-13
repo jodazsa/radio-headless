@@ -41,11 +41,25 @@ sudo cp systemd/rotary-controller.service /etc/systemd/system/
 sudo cp systemd/radio-update-stations.service /etc/systemd/system/
 sudo cp systemd/radio-update-stations.timer /etc/systemd/system/
 sudo cp systemd/radio-web-backend.service /etc/systemd/system/
+
+# Install backend override env file if missing (QoL for custom port/paths)
+if [ ! -f /etc/default/radio-web-backend ]; then
+sudo tee /etc/default/radio-web-backend >/dev/null <<'EOF'
+# Optional overrides for radio-web-backend.service
+#BIND_HOST=0.0.0.0
+#BIND_PORT=8080
+#RADIO_PLAY_CMD=/usr/local/bin/radio-play
+#RADIO_STATE_FILE=/home/radio/.radio-state
+#WEB_ROOT=/home/radio/radio-headless/web
+#WEB_DEFAULT_PAGE=radio.html
+EOF
+fi
+
 sudo systemctl daemon-reload
 
 # Enable timer/backend if not already enabled
-sudo systemctl enable radio-update-stations.timer 2>/dev/null || true
-sudo systemctl enable radio-web-backend.service 2>/dev/null || true
+sudo systemctl enable --now radio-update-stations.timer 2>/dev/null || true
+sudo systemctl enable --now radio-web-backend.service 2>/dev/null || true
 
 # 7. Restart services
 echo "→ Restarting services..."

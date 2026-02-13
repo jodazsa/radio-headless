@@ -352,12 +352,19 @@ class CommandHandler(BaseHTTPRequestHandler):
                 key, value = line.split("=", 1)
                 parsed[key] = value
 
+        try:
+            bank = int(parsed.get("current_bank", "0") or 0)
+            station = int(parsed.get("current_station", "0") or 0)
+        except ValueError:
+            bank = 0
+            station = 0
+
         self.send_json_response(
             200,
             {
                 "success": True,
-                "bank": int(parsed.get("current_bank", 0)),
-                "station": int(parsed.get("current_station", 0)),
+                "bank": max(0, bank),
+                "station": max(0, station),
                 "bank_name": parsed.get("bank_name", ""),
                 "station_name": parsed.get("station_name", ""),
                 "playback_state": parsed.get("playback_state", "stopped"),
