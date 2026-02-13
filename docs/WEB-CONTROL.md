@@ -35,8 +35,11 @@ git pull --ff-only
 From the repo on the Pi:
 
 ```bash
+cd ~/radio-headless
 python3 web/pi_backend.py
 ```
+
+If you run `python3 web/pi_backend.py` from `~` (home) instead of `~/radio-headless`, Python will look for `/home/radio/web/pi_backend.py` and fail with `No such file or directory`.
 
 Then browse to:
 
@@ -125,5 +128,17 @@ sudo systemctl restart radio-web-backend.service
   - confirm MPD is running: `sudo systemctl status mpd`.
 - Browser cannot reach backend:
   - verify Pi IP/hostname, firewall, and that backend is bound to `0.0.0.0`.
+- `cp: ... are the same file` during install/deploy:
+  - this happens when the repo is already at `/home/radio/radio-headless` and a script copies `web/pi_backend.py` onto itself.
+  - update to the latest `install-rotary.sh` / `deploy-rotary.sh`; they now skip same-file copies so service enable/start steps still run.
+- Backend not running after reboot:
+  - check `sudo systemctl is-enabled radio-web-backend.service` (should be `enabled`).
+  - if disabled or failed, run:
+    ```bash
+    cd ~/radio-headless
+    ./deploy-rotary.sh
+    sudo systemctl enable --now radio-web-backend.service
+    sudo systemctl status radio-web-backend.service --no-pager
+    ```
 - CORS/security tightening:
   - replace `Access-Control-Allow-Origin: *` with your trusted origin.
