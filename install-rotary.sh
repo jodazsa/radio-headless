@@ -142,7 +142,7 @@ sudo copy_file_safe etc/mpd.conf /etc/mpd.conf
 # Copy web backend and UI
 sudo mkdir -p /home/radio/radio-headless/web
 # Backward compatibility: allow running `python3 web/pi_backend.py` from /home/radio.
-sudo ln -sfn /home/radio/radio-headless/web /home/radio/web
+sudo ln -sTfn /home/radio/radio-headless/web /home/radio/web
 sudo copy_file_safe web/pi_backend.py /home/radio/radio-headless/web/
 sudo copy_file_safe web/radio.html /home/radio/radio-headless/web/
 sudo copy_file_safe web/setup.html /home/radio/radio-headless/web/
