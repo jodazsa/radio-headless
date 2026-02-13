@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Radio Network Setup</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            min-height: 100vh;
+            display: grid;
+            place-items: center;
+            background: #121212;
+            color: #f5f5f5;
+            padding: 20px;
+        }
+
+        .card {
+            width: 100%;
+            max-width: 480px;
+            background: #1e1e1e;
+            border: 1px solid #333;
+            border-radius: 12px;
+            padding: 24px;
+            box-shadow: 0 16px 30px rgba(0, 0, 0, 0.35);
+        }
+
+        h1 {
+            margin: 0 0 10px;
+            font-size: 1.5rem;
+        }
+
+        p {
+            margin-top: 0;
+            color: #cfcfcf;
+        }
+
+        label {
+            display: block;
+            margin: 14px 0 6px;
+            font-weight: bold;
+        }
+
+        input {
+            width: 100%;
+            padding: 10px 12px;
+            border-radius: 8px;
+            border: 1px solid #444;
+            background: #111;
+            color: #f5f5f5;
+            font-size: 1rem;
+        }
+
+        button {
+            margin-top: 18px;
+            width: 100%;
+            padding: 12px;
+            background: #ff8c00;
+            color: #111;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 1rem;
+            font-weight: 700;
+        }
+
+        button:disabled {
+            opacity: 0.7;
+            cursor: not-allowed;
+        }
+
+        .status {
+            margin-top: 14px;
+            padding: 10px;
+            border-radius: 8px;
+            background: #2a2a2a;
+            min-height: 20px;
+        }
+
+        .hint {
+            font-size: 0.9rem;
+            color: #9f9f9f;
+            margin-top: 10px;
+        }
+    </style>
+</head>
+<body>
+    <main class="card">
+        <h1>Configure Internet</h1>
+        <p>Enter your Wi-Fi network details and a new hostname for this radio.</p>
+
+        <form id="setup-form">
+            <label for="ssid">Wi-Fi Name (SSID)</label>
+            <input id="ssid" name="ssid" maxlength="32" required>
+
+            <label for="password">Wi-Fi Password</label>
+            <input id="password" name="password" type="password" minlength="8" maxlength="63" required>
+
+            <label for="hostname">Device Hostname</label>
+            <input id="hostname" name="hostname" maxlength="63" pattern="[a-z0-9-]+" required placeholder="kitchen-radio">
+
+            <button id="submit" type="submit">Apply Settings</button>
+        </form>
+
+        <div class="status" id="status">Checking setup mode…</div>
+        <div class="hint">Hostname must use lowercase letters, numbers, and hyphens.</div>
+    </main>
+
+    <script>
+        const form = document.getElementById('setup-form');
+        const submitBtn = document.getElementById('submit');
+        const statusEl = document.getElementById('status');
+
+        function setStatus(text) {
+            statusEl.textContent = text;
+        }
+
+        async function checkSetupMode() {
+            try {
+                const response = await fetch('/setup/config');
+                const data = await response.json();
+                if (data.setup_mode) {
+                    setStatus('Setup mode active. Ready to apply settings.');
+                    submitBtn.disabled = false;
+                } else {
+                    setStatus('Setup mode is not enabled on this device right now.');
+                    submitBtn.disabled = true;
+                }
+            } catch (error) {
+                setStatus('Unable to verify setup mode.');
+                submitBtn.disabled = true;
+            }
+        }
+
+        form.addEventListener('submit', async (event) => {
+            event.preventDefault();
+
+            submitBtn.disabled = true;
+            setStatus('Applying settings… this can take up to 30 seconds.');
+
+            const payload = {
+                ssid: form.ssid.value.trim(),
+                password: form.password.value,
+                hostname: form.hostname.value.trim().toLowerCase()
+            };
+
+            try {
+                const response = await fetch('/setup/apply', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+                const data = await response.json();
+                if (response.ok && data.success) {
+                    setStatus(data.message || 'Settings applied. The radio is reconnecting now.');
+                    form.reset();
+                    return;
+                }
+
+                if (data.fields) {
+                    const details = Object.entries(data.fields)
+                        .map(([field, message]) => `${field}: ${message}`)
+                        .join(' | ');
+                    setStatus(`Validation error: ${details}`);
+                } else {
+                    setStatus(data.error || 'Failed to apply settings.');
+                }
+            } catch (error) {
+                setStatus('Network error while applying settings.');
+            } finally {
+                submitBtn.disabled = false;
+            }
+        });
+
+        checkSetupMode();
+    </script>
+</body>
+</html>

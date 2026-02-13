@@ -23,11 +23,16 @@ RADIO_PLAY_CMD = os.getenv("RADIO_PLAY_CMD", "radio-play")
 STATE_FILE = os.getenv("RADIO_STATE_FILE", "/home/radio/.radio-state")
 WEB_ROOT = Path(os.getenv("WEB_ROOT", Path(__file__).resolve().parent))
 DEFAULT_PAGE = os.getenv("WEB_DEFAULT_PAGE", "radio.html")
+SETUP_PAGE = os.getenv("WEB_SETUP_PAGE", "setup.html")
+SETUP_MARKER_FILE = Path(os.getenv("RADIO_SETUP_MARKER_FILE", "/var/lib/radio/setup-mode"))
+SETUP_APPLY_CMD = os.getenv("RADIO_SETUP_APPLY_CMD", "/usr/bin/sudo /usr/local/lib/radio/apply-network-config")
 
 ALLOWED_COMMANDS = [
     r"^mpc\s+(play|pause|stop|next|prev|volume\s+\d{1,3})$",
     r"^radio-play\s+\d+\s+\d+$",
 ]
+
+HOSTNAME_PATTERN = re.compile(r"^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$")
 
 
 def is_command_allowed(command: str) -> bool:
@@ -40,6 +45,39 @@ def command_to_argv(command: str) -> list[str]:
     if argv and argv[0] == "radio-play":
         argv[0] = RADIO_PLAY_CMD
     return argv
+
+
+def is_setup_mode() -> bool:
+    return SETUP_MARKER_FILE.exists()
+
+
+def normalize_hostname(hostname: str) -> str:
+    return hostname.strip().lower()
+
+
+def validate_setup_payload(data: dict[str, Any]) -> tuple[dict[str, str], dict[str, str]]:
+    errors: dict[str, str] = {}
+
+    ssid = str(data.get("ssid", "")).strip()
+    password = str(data.get("password", ""))
+    hostname = normalize_hostname(str(data.get("hostname", "")))
+
+    if not ssid:
+        errors["ssid"] = "SSID is required"
+    elif len(ssid) > 32:
+        errors["ssid"] = "SSID must be 32 characters or less"
+
+    if len(password) < 8:
+        errors["password"] = "Password must be at least 8 characters"
+    elif len(password) > 63:
+        errors["password"] = "Password must be 63 characters or less"
+
+    if not hostname:
+        errors["hostname"] = "Hostname is required"
+    elif len(hostname) > 63 or HOSTNAME_PATTERN.match(hostname) is None:
+        errors["hostname"] = "Hostname must be lowercase letters, numbers, hyphens, and 63 chars max"
+
+    return {"ssid": ssid, "password": password, "hostname": hostname}, errors
 
 
 class CommandHandler(BaseHTTPRequestHandler):
@@ -59,6 +97,10 @@ class CommandHandler(BaseHTTPRequestHandler):
             self._send_static_file(DEFAULT_PAGE)
             return
 
+        if self.path in {"/setup", "/setup.html", f"/{SETUP_PAGE}"}:
+            self._send_static_file(SETUP_PAGE)
+            return
+
         if self.path == "/config":
             self.send_json_response(
                 200,
@@ -67,6 +109,17 @@ class CommandHandler(BaseHTTPRequestHandler):
                     "bind_host": BIND_HOST,
                     "bind_port": BIND_PORT,
                     "radio_play_cmd": RADIO_PLAY_CMD,
+                },
+            )
+            return
+
+        if self.path == "/setup/config":
+            self.send_json_response(
+                200,
+                {
+                    "success": True,
+                    "setup_mode": is_setup_mode(),
+                    "setup_page": SETUP_PAGE,
                 },
             )
             return
@@ -132,6 +185,13 @@ class CommandHandler(BaseHTTPRequestHandler):
             self._send_state()
             return
 
+        if self.path == "/setup/apply":
+            data = self._read_json_body(optional=False)
+            if data is None:
+                return
+            self._apply_setup(data)
+            return
+
         self.send_error(404)
 
     def _read_json_body(self, optional: bool = False) -> dict[str, Any] | None:
@@ -155,8 +215,72 @@ class CommandHandler(BaseHTTPRequestHandler):
             )
             return None
 
-    def _run_local(self, argv: list[str]) -> subprocess.CompletedProcess[str]:
-        return subprocess.run(argv, capture_output=True, text=True, timeout=10)
+    def _run_local(
+        self,
+        argv: list[str],
+        *,
+        timeout: int = 10,
+        input_text: str | None = None,
+    ) -> subprocess.CompletedProcess[str]:
+        return subprocess.run(argv, capture_output=True, text=True, timeout=timeout, input=input_text)
+
+    def _apply_setup(self, data: dict[str, Any]):
+        if not is_setup_mode():
+            self.send_json_response(
+                403,
+                {"success": False, "error": "Setup mode is not enabled", "error_type": "setup_mode_disabled"},
+            )
+            return
+
+        payload, errors = validate_setup_payload(data)
+        if errors:
+            self.send_json_response(
+                400,
+                {
+                    "success": False,
+                    "error": "Invalid setup payload",
+                    "error_type": "invalid_setup_payload",
+                    "fields": errors,
+                },
+            )
+            return
+
+        try:
+            result = self._run_local(
+                shlex.split(SETUP_APPLY_CMD),
+                timeout=60,
+                input_text=json.dumps(payload),
+            )
+            if result.returncode != 0:
+                self.send_json_response(
+                    500,
+                    {
+                        "success": False,
+                        "error": result.stderr.strip() or "Failed to apply settings",
+                        "error_type": "apply_failed",
+                        "exit_code": result.returncode,
+                    },
+                )
+                return
+
+            output = result.stdout.strip()
+            if output:
+                try:
+                    data = json.loads(output)
+                    if isinstance(data, dict):
+                        self.send_json_response(200, data)
+                        return
+                except json.JSONDecodeError:
+                    pass
+
+            self.send_json_response(200, {"success": True, "message": "Settings applied"})
+        except subprocess.TimeoutExpired:
+            self.send_json_response(504, {"success": False, "error": "Apply command timed out", "error_type": "timeout"})
+        except FileNotFoundError as exc:
+            self.send_json_response(
+                500,
+                {"success": False, "error": f"Apply command missing: {exc}", "error_type": "command_not_found"},
+            )
 
     def _send_local_command(self, command: str):
         try:
@@ -260,6 +384,9 @@ def main():
     print(f"state file: {STATE_FILE}")
     print(f"web root: {WEB_ROOT}")
     print(f"default page: {DEFAULT_PAGE}")
+    print(f"setup page: {SETUP_PAGE}")
+    print(f"setup marker: {SETUP_MARKER_FILE}")
+    print(f"setup apply command: {SETUP_APPLY_CMD}")
     print("Press Ctrl+C to stop")
     print("=" * 60)
 
