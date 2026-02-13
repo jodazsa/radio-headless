@@ -8,10 +8,15 @@ copy_file_safe() {
     # Use sudo for destination paths that require elevated permissions.
     local src="$1"
     local dest="$2"
+    local dest_target="$dest"
+
+    if [ -d "$dest" ]; then
+        dest_target="$dest/$(basename "$src")"
+    fi
 
     local src_abs dest_abs
     src_abs="$(readlink -f "$src" 2>/dev/null || true)"
-    dest_abs="$(readlink -f "$dest" 2>/dev/null || true)"
+    dest_abs="$(readlink -f "$dest_target" 2>/dev/null || true)"
 
     if [ -n "$src_abs" ] && [ -n "$dest_abs" ] && [ "$src_abs" = "$dest_abs" ]; then
         echo "  Skipping copy for $src (source and destination are the same file)"
@@ -49,6 +54,8 @@ copy_file_safe etc/mpd.conf /etc/mpd.conf
 # 5. Update web backend and UI
 echo "→ Updating web backend + UI..."
 sudo mkdir -p /home/radio/radio-headless/web
+# Backward compatibility: allow running `python3 web/pi_backend.py` from /home/radio.
+sudo ln -sfn /home/radio/radio-headless/web /home/radio/web
 copy_file_safe web/pi_backend.py /home/radio/radio-headless/web/
 copy_file_safe web/radio.html /home/radio/radio-headless/web/
 copy_file_safe web/setup.html /home/radio/radio-headless/web/
