@@ -18,7 +18,7 @@ copy_file_safe() {
         return 0
     fi
 
-    sudo cp "$src" "$dest"
+    cp "$src" "$dest"
 }
 
 echo "=== Radio Project Installation (Rotary Switch Variant) ==="
@@ -120,42 +120,42 @@ pip3 install --break-system-packages \
 echo "→ Deploying configuration and scripts..."
 
 # Copy scripts (note: no oled-display for this variant)
-copy_file_safe bin/radio_lib.py /usr/local/bin/
-copy_file_safe bin/rotary-controller /usr/local/bin/
-copy_file_safe bin/radio-play /usr/local/bin/
-copy_file_safe bin/update-stations /usr/local/bin/
+sudo copy_file_safe bin/radio_lib.py /usr/local/bin/
+sudo copy_file_safe bin/rotary-controller /usr/local/bin/
+sudo copy_file_safe bin/radio-play /usr/local/bin/
+sudo copy_file_safe bin/update-stations /usr/local/bin/
 sudo chmod +x /usr/local/bin/{rotary-controller,radio-play,update-stations}
 
 # Copy configs (use rotary-specific hardware config)
-copy_file_safe config/hardware-rotary.yaml /home/radio/
-copy_file_safe config/stations.yaml /home/radio/
+sudo copy_file_safe config/hardware-rotary.yaml /home/radio/
+sudo copy_file_safe config/stations.yaml /home/radio/
 sudo chown radio:radio /home/radio/*.yaml
 
 # Copy MPD config
-copy_file_safe etc/mpd.conf /etc/mpd.conf
+sudo copy_file_safe etc/mpd.conf /etc/mpd.conf
 
 # Copy web backend and UI
 sudo mkdir -p /home/radio/radio-headless/web
-copy_file_safe web/pi_backend.py /home/radio/radio-headless/web/
-copy_file_safe web/radio.html /home/radio/radio-headless/web/
-copy_file_safe web/setup.html /home/radio/radio-headless/web/
+sudo copy_file_safe web/pi_backend.py /home/radio/radio-headless/web/
+sudo copy_file_safe web/radio.html /home/radio/radio-headless/web/
+sudo copy_file_safe web/setup.html /home/radio/radio-headless/web/
 sudo chown -R radio:radio /home/radio/radio-headless/web
 
 
 # Install privileged setup helper + sudoers policy
 sudo mkdir -p /usr/local/lib/radio
-copy_file_safe bin/apply-network-config /usr/local/lib/radio/apply-network-config
+sudo copy_file_safe bin/apply-network-config /usr/local/lib/radio/apply-network-config
 sudo chown root:root /usr/local/lib/radio/apply-network-config
 sudo chmod 750 /usr/local/lib/radio/apply-network-config
-copy_file_safe etc/sudoers.d/radio-provisioning /etc/sudoers.d/radio-provisioning
+sudo copy_file_safe etc/sudoers.d/radio-provisioning /etc/sudoers.d/radio-provisioning
 sudo chown root:root /etc/sudoers.d/radio-provisioning
 sudo chmod 440 /etc/sudoers.d/radio-provisioning
 
 # Copy systemd service (rotary + update timer + web backend)
-copy_file_safe systemd/rotary-controller.service /etc/systemd/system/
-copy_file_safe systemd/radio-update-stations.service /etc/systemd/system/
-copy_file_safe systemd/radio-update-stations.timer /etc/systemd/system/
-copy_file_safe systemd/radio-web-backend.service /etc/systemd/system/
+sudo copy_file_safe systemd/rotary-controller.service /etc/systemd/system/
+sudo copy_file_safe systemd/radio-update-stations.service /etc/systemd/system/
+sudo copy_file_safe systemd/radio-update-stations.timer /etc/systemd/system/
+sudo copy_file_safe systemd/radio-web-backend.service /etc/systemd/system/
 
 # Install backend override env file if missing (QoL for custom port/paths)
 if [ ! -f /etc/default/radio-web-backend ]; then

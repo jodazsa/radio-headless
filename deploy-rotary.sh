@@ -17,7 +17,7 @@ copy_file_safe() {
         return 0
     fi
 
-    sudo cp "$src" "$dest"
+    cp "$src" "$dest"
 }
 
 echo "=== Deploying Rotary Switch Radio Updates ==="
@@ -29,36 +29,36 @@ git pull origin main
 
 # 2. Update scripts
 echo "→ Updating scripts..."
-copy_file_safe bin/radio_lib.py /usr/local/bin/
-copy_file_safe bin/rotary-controller /usr/local/bin/
-copy_file_safe bin/radio-play /usr/local/bin/
-copy_file_safe bin/update-stations /usr/local/bin/
+sudo copy_file_safe bin/radio_lib.py /usr/local/bin/
+sudo copy_file_safe bin/rotary-controller /usr/local/bin/
+sudo copy_file_safe bin/radio-play /usr/local/bin/
+sudo copy_file_safe bin/update-stations /usr/local/bin/
 sudo chmod +x /usr/local/bin/{rotary-controller,radio-play,update-stations}
 
 # 3. Update configs
 echo "→ Updating configs..."
-copy_file_safe config/hardware-rotary.yaml /home/radio/
-copy_file_safe config/stations.yaml /home/radio/
+sudo copy_file_safe config/hardware-rotary.yaml /home/radio/
+sudo copy_file_safe config/stations.yaml /home/radio/
 sudo chown radio:radio /home/radio/*.yaml
 
 # 4. Update MPD config
 echo "→ Updating MPD config..."
-copy_file_safe etc/mpd.conf /etc/mpd.conf
+sudo copy_file_safe etc/mpd.conf /etc/mpd.conf
 
 # 5. Update web backend and UI
 echo "→ Updating web backend + UI..."
 sudo mkdir -p /home/radio/radio-headless/web
-copy_file_safe web/pi_backend.py /home/radio/radio-headless/web/
-copy_file_safe web/radio.html /home/radio/radio-headless/web/
-copy_file_safe web/setup.html /home/radio/radio-headless/web/
+sudo copy_file_safe web/pi_backend.py /home/radio/radio-headless/web/
+sudo copy_file_safe web/radio.html /home/radio/radio-headless/web/
+sudo copy_file_safe web/setup.html /home/radio/radio-headless/web/
 sudo chown -R radio:radio /home/radio/radio-headless/web
 
 # 6. Update systemd service
 echo "→ Updating systemd service..."
-copy_file_safe systemd/rotary-controller.service /etc/systemd/system/
-copy_file_safe systemd/radio-update-stations.service /etc/systemd/system/
-copy_file_safe systemd/radio-update-stations.timer /etc/systemd/system/
-copy_file_safe systemd/radio-web-backend.service /etc/systemd/system/
+sudo copy_file_safe systemd/rotary-controller.service /etc/systemd/system/
+sudo copy_file_safe systemd/radio-update-stations.service /etc/systemd/system/
+sudo copy_file_safe systemd/radio-update-stations.timer /etc/systemd/system/
+sudo copy_file_safe systemd/radio-web-backend.service /etc/systemd/system/
 
 # Install backend override env file if missing (QoL for custom port/paths)
 if [ ! -f /etc/default/radio-web-backend ]; then
