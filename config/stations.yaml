@@ -360,60 +360,49 @@ banks:
       0:
         name: "FlyLo FM"
         type: mp3_loop_random_start
-        # play ONE file, seek to a random position, loop forever
-        file: "music/GTA/FlyLo FM - GTA V.mp3"
+        file: "GTA/FlyLo FM - GTA V.mp3"
       1:
         name: "Fusion FM"
         type: mp3_loop_random_start
-        # play ONE file, seek to a random position, loop forever
-        file: "music/GTA/Fusion FM - GTA IV.mp3"
+        file: "GTA/Fusion FM - GTA IV.mp3"
       2:
         name: "Los Santos Rock Radio"
         type: mp3_loop_random_start
-        # play ONE file, seek to a random position, loop forever
-        file: "music/GTA/Los Santos Rock Radio - GTA V.mp3"
+        file: "GTA/Los Santos Rock Radio - GTA V.mp3"
       3:
         name: "MSX FM"
         type: mp3_loop_random_start
-        # play ONE file, seek to a random position, loop forever
-        file: "music/GTA/MSX FM - GTA III.mp3"
+        file: "GTA/MSX FM - GTA III.mp3"
       4:
         name: "Jazz Nation Radio"
         type: mp3_loop_random_start
-        # play ONE file, seek to a random position, loop forever
-        file: "music/GTA/Jazz Nation Radio - GTA IV.mp3"
+        file: "GTA/Jazz Nation Radio - GTA IV.mp3"
       5:
         name: "K-DST"
         type: mp3_loop_random_start
-        # play ONE file, seek to a random position, loop forever
-        file: "music/GTA/K-DST - GTA San Andreas.mp3"
+        file: "GTA/K-DST - GTA San Andreas.mp3"
       6:
         name: "K Rose"
         type: mp3_loop_random_start
-        # play ONE file, seek to a random position, loop forever
-        file: "music/GTA/K Rose - GTA San Andreas.mp3"
+        file: "GTA/K Rose - GTA San Andreas.mp3"
       7:
         name: "Blue Ark Radio"
         type: mp3_loop_random_start
-        # play ONE file, seek to a random position, loop forever
-        file: "music/GTA/The Blue Ark - GTA V.mp3"
+        file: "GTA/The Blue Ark - GTA V.mp3"
       8:
         name: "K-JAH Radio"
         type: mp3_loop_random_start
-        # play ONE file, seek to a random position, loop forever
-        file: "music/GTA/K-JAH - GTA III.mp3"
+        file: "GTA/K-JAH - GTA III.mp3"
       9:
         name: "Non-Stop Pop"
         type: mp3_loop_random_start
-        # play ONE file, seek to a random position, loop forever
-        file: "music/GTA/Non Stop Pop FM - GTA V.mp3"
+        file: "GTA/Non Stop Pop FM - GTA V.mp3"
   9:
     name: "Offline Recordings"
     stations:
       0:
         name: "Theme Time Radio with Bob Dylan"
         type: mp3_dir_random_start_then_in_order
-        # choose ONE item randomly each time this station is selected
         dir: "shows/BobDylan"
       1:
         name: "Iggy Pop"
@@ -446,7 +435,7 @@ banks:
       8:
         name: "Muji BGM 1980-2000"
         type: mp3_loop_random_start
-        file: "music/Ambient/Muji BGM 1980-2000.mp3"    
+        file: "Ambient/Muji BGM 1980-2000.mp3"    
       9:
         name: "Alice Cooper"
         type: mp3_dir_random_start_then_in_order
