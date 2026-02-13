@@ -1,0 +1,20 @@
+[Unit]
+Description=Radio web backend (API + hosted UI)
+After=network.target mpd.service
+
+[Service]
+Type=simple
+User=radio
+WorkingDirectory=/home/radio/radio-headless
+Environment=BIND_HOST=0.0.0.0
+Environment=BIND_PORT=8080
+Environment=RADIO_PLAY_CMD=/usr/local/bin/radio-play
+Environment=RADIO_STATE_FILE=/home/radio/.radio-state
+Environment=WEB_ROOT=/home/radio/radio-headless/web
+Environment=WEB_DEFAULT_PAGE=pi-music-controller.html
+ExecStart=/usr/bin/python3 /home/radio/radio-headless/web/pi_backend.py
+Restart=on-failure
+RestartSec=2
+
+[Install]
+WantedBy=multi-user.target

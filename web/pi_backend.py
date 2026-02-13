@@ -9,7 +9,9 @@ from __future__ import annotations
 
 from http.server import BaseHTTPRequestHandler, HTTPServer
 import json
+import mimetypes
 import os
+from pathlib import Path
 import re
 import shlex
 import subprocess
@@ -19,6 +21,8 @@ BIND_HOST = os.getenv("BIND_HOST", "0.0.0.0")
 BIND_PORT = int(os.getenv("BIND_PORT", "8080"))
 RADIO_PLAY_CMD = os.getenv("RADIO_PLAY_CMD", "radio-play")
 STATE_FILE = os.getenv("RADIO_STATE_FILE", "/home/radio/.radio-state")
+WEB_ROOT = Path(os.getenv("WEB_ROOT", Path(__file__).resolve().parent))
+DEFAULT_PAGE = os.getenv("WEB_DEFAULT_PAGE", "pi-music-controller.html")
 
 ALLOWED_COMMANDS = [
     r"^mpc\s+(play|pause|stop|next|prev|volume\s+\d{1,3})$",
@@ -47,6 +51,14 @@ class CommandHandler(BaseHTTPRequestHandler):
         self.end_headers()
 
     def do_GET(self):
+        if self.path in {"/", ""}:
+            self._send_static_file(DEFAULT_PAGE)
+            return
+
+        if self.path == f"/{DEFAULT_PAGE}":
+            self._send_static_file(DEFAULT_PAGE)
+            return
+
         if self.path == "/config":
             self.send_json_response(
                 200,
@@ -58,7 +70,32 @@ class CommandHandler(BaseHTTPRequestHandler):
                 },
             )
             return
+
+        if self.path.startswith("/") and self.path.count("/") == 1 and not self.path.endswith("/"):
+            self._send_static_file(self.path[1:])
+            return
+
         self.send_error(404)
+
+    def _send_static_file(self, relative_path: str):
+        try:
+            requested = (WEB_ROOT / relative_path).resolve()
+            if WEB_ROOT not in requested.parents and requested != WEB_ROOT:
+                self.send_error(403)
+                return
+            if not requested.is_file():
+                self.send_error(404)
+                return
+
+            content_type = mimetypes.guess_type(requested.name)[0] or "application/octet-stream"
+            content = requested.read_bytes()
+            self.send_response(200)
+            self.send_header("Content-Type", content_type)
+            self.send_header("Content-Length", str(len(content)))
+            self.end_headers()
+            self.wfile.write(content)
+        except OSError as exc:
+            self.send_json_response(500, {"success": False, "error": str(exc), "error_type": "io_error"})
 
     def do_POST(self):
         if self.path == "/command":
@@ -221,6 +258,8 @@ def main():
     print(f"Listening on: http://{BIND_HOST}:{BIND_PORT}")
     print(f"radio-play command: {RADIO_PLAY_CMD}")
     print(f"state file: {STATE_FILE}")
+    print(f"web root: {WEB_ROOT}")
+    print(f"default page: {DEFAULT_PAGE}")
     print("Press Ctrl+C to stop")
     print("=" * 60)
 

@@ -16,7 +16,7 @@
 </head>
 <body>
   <h1>Pi Music Controller</h1>
-  <p>Run <code>web/pi_backend.py</code> on the Pi, then use this page from any browser on your network.</p>
+  <p>This page is hosted by <code>web/pi_backend.py</code> on the Pi.</p>
 
   <div class="card">
     <div class="row">
@@ -69,7 +69,7 @@ const byId = (id) => document.getElementById(id);
 
 function defaultBackendUrl() {
   if (window.location.protocol.startsWith('http')) {
-    return `${window.location.protocol}//${window.location.hostname}:8080`;
+    return window.location.origin;
   }
   return 'http://raspberrypi.local:8080';
 }

@@ -28,20 +28,30 @@ sudo chown radio:radio /home/radio/*.yaml
 echo "→ Updating MPD config..."
 sudo cp etc/mpd.conf /etc/mpd.conf
 
-# 5. Update systemd service
+# 5. Update web backend and UI
+echo "→ Updating web backend + UI..."
+sudo mkdir -p /home/radio/radio-headless/web
+sudo cp web/pi_backend.py /home/radio/radio-headless/web/
+sudo cp web/pi-music-controller.html /home/radio/radio-headless/web/
+sudo chown -R radio:radio /home/radio/radio-headless/web
+
+# 6. Update systemd service
 echo "→ Updating systemd service..."
 sudo cp systemd/rotary-controller.service /etc/systemd/system/
 sudo cp systemd/radio-update-stations.service /etc/systemd/system/
 sudo cp systemd/radio-update-stations.timer /etc/systemd/system/
+sudo cp systemd/radio-web-backend.service /etc/systemd/system/
 sudo systemctl daemon-reload
 
-# Enable timer if not already enabled
+# Enable timer/backend if not already enabled
 sudo systemctl enable radio-update-stations.timer 2>/dev/null || true
+sudo systemctl enable radio-web-backend.service 2>/dev/null || true
 
-# 6. Restart services
+# 7. Restart services
 echo "→ Restarting services..."
 sudo systemctl restart rotary-controller.service
 sudo systemctl restart mpd.service
+sudo systemctl restart radio-web-backend.service
 
 echo ""
 echo "✓ Deployment complete!"
@@ -50,6 +60,7 @@ echo "Service status:"
 echo "---------------"
 sudo systemctl is-active rotary-controller.service && echo "✓ rotary-controller: running" || echo "✗ rotary-controller: failed"
 sudo systemctl is-active mpd.service && echo "✓ mpd: running" || echo "✗ mpd: failed"
+sudo systemctl is-active radio-web-backend.service && echo "✓ web backend: running" || echo "✗ web backend: failed"
 systemctl is-active radio-update-stations.timer && echo "✓ update-stations timer: active" || echo "✗ update-stations timer: inactive"
 echo ""
 echo "For detailed logs:"
@@ -57,4 +68,5 @@ echo "  tail -f /home/radio/logs/rotary.log"
 echo "  tail -f /home/radio/logs/update-stations.log"
 echo "  sudo journalctl -u rotary-controller.service -n 20"
 echo "  sudo journalctl -u radio-update-stations.service -n 20"
+echo "  sudo journalctl -u radio-web-backend.service -n 20"
 echo ""
