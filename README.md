@@ -76,10 +76,10 @@ This repository configures a **headless Raspberry Pi radio** with:
 - `deploy-rotary.sh` – pull/update scripts and restart services on an existing installation
 - `bin/` – runtime scripts (`rotary-controller`, `radio-play`, `update-stations`, shared `radio_lib.py`)
 - `config/` – station list and hardware pin mapping
-- `systemd/` – service/timer unit files
+- `systemd/` – service/timer unit files (including the web backend service)
 - `etc/mpd.conf` – MPD configuration
 - `docs/` – usage guides and maintenance notes
-- `web/` – local browser UI and SSH backend for remote control
+- `web/` – local browser UI and Pi-hosted backend for remote control
 
 ---
 
@@ -152,6 +152,7 @@ sudo reboot
 ```bash
 sudo systemctl is-active rotary-controller.service
 sudo systemctl is-active mpd.service
+sudo systemctl is-active radio-web-backend.service
 systemctl is-active radio-update-stations.timer
 ```
 
@@ -161,6 +162,7 @@ systemctl is-active radio-update-stations.timer
 tail -f /home/radio/logs/rotary.log
 sudo journalctl -u rotary-controller.service -f
 sudo journalctl -u radio-update-stations.service -f
+sudo journalctl -u radio-web-backend.service -f
 ```
 
 ---
@@ -170,4 +172,4 @@ sudo journalctl -u radio-update-stations.service -f
 - `docs/ROTARY-README.md` – rotary-switch variant behavior and wiring
 - `docs/MUSIC-TRANSFER.md` – loading offline music content
 - `docs/AUTO-UPDATE.md` – update automation details
-- `docs/WEB-CONTROL.md` – run a local web backend and browser UI to control the Pi over SSH
+- `docs/WEB-CONTROL.md` – run the Pi-hosted web backend and browser UI for network control

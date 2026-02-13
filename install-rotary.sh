@@ -117,10 +117,17 @@ sudo chown radio:radio /home/radio/*.yaml
 # Copy MPD config
 sudo cp etc/mpd.conf /etc/mpd.conf
 
-# Copy systemd service (only rotary-controller, no encoder or oled services)
+# Copy web backend and UI
+sudo mkdir -p /home/radio/radio-headless/web
+sudo cp web/pi_backend.py /home/radio/radio-headless/web/
+sudo cp web/pi-music-controller.html /home/radio/radio-headless/web/
+sudo chown -R radio:radio /home/radio/radio-headless/web
+
+# Copy systemd service (rotary + update timer + web backend)
 sudo cp systemd/rotary-controller.service /etc/systemd/system/
 sudo cp systemd/radio-update-stations.service /etc/systemd/system/
 sudo cp systemd/radio-update-stations.timer /etc/systemd/system/
+sudo cp systemd/radio-web-backend.service /etc/systemd/system/
 sudo systemctl daemon-reload
 
 # 8. Enable services
@@ -128,6 +135,7 @@ echo "→ Enabling services..."
 sudo systemctl enable rotary-controller.service
 sudo systemctl enable mpd.service
 sudo systemctl enable radio-update-stations.timer
+sudo systemctl enable radio-web-backend.service
 
 # 9. Verify I2C hardware detection
 echo ""
@@ -162,8 +170,13 @@ echo "5. Verify services:"
 echo "   sudo systemctl status rotary-controller"
 echo "   sudo systemctl status mpd"
 echo "   systemctl status radio-update-stations.timer"
+echo "   sudo systemctl status radio-web-backend"
 echo ""
 echo "6. Watch logs:"
 echo "   tail -f /home/radio/logs/rotary.log"
 echo "   tail -f /home/radio/logs/update-stations.log"
+echo "   sudo journalctl -u radio-web-backend.service -f"
+echo ""
+echo "7. Open web UI:"
+echo "   http://<pi-hostname-or-ip>:8080/"
 echo ""

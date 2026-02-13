@@ -1,10 +1,11 @@
 # Web Control Setup (Browser -> backend on Pi -> local radio commands)
 
-This setup runs the backend **on the radio-headless Raspberry Pi itself**.
+This setup runs the backend **on the radio-headless Raspberry Pi itself** and has the Pi host the HTML UI.
 
 ## Architecture
 
-- Browser sends HTTP requests to the Pi backend on port `8080`.
+- Browser opens the UI from the Pi (`http://<pi-hostname-or-ip>:8080/`).
+- UI sends API requests to that same backend origin.
 - Backend validates commands against a whitelist.
 - Backend executes local Pi commands (`mpc`, `radio-play`) directly.
 
@@ -18,6 +19,7 @@ These files are included in this repo:
 
 - `web/pi_backend.py`
 - `web/pi-music-controller.html`
+- `systemd/radio-web-backend.service`
 
 On the Pi:
 
@@ -28,7 +30,7 @@ git pull --ff-only
 
 ---
 
-## 2) Start backend on the Pi
+## 2) Start backend manually (quick test)
 
 From the repo on the Pi:
 
@@ -36,15 +38,22 @@ From the repo on the Pi:
 python3 web/pi_backend.py
 ```
 
+Then browse to:
+
+```text
+http://<pi-hostname-or-ip>:8080/
+```
+
 Backend defaults:
 
 - bind host: `0.0.0.0`
 - bind port: `8080`
+- web root: `web/`
 
 Optional env overrides:
 
 ```bash
-BIND_HOST=0.0.0.0 BIND_PORT=8080 RADIO_PLAY_CMD=/home/radio/radio-headless/bin/radio-play python3 web/pi_backend.py
+BIND_HOST=0.0.0.0 BIND_PORT=8080 WEB_ROOT=/home/radio/radio-headless/web RADIO_PLAY_CMD=/usr/local/bin/radio-play python3 web/pi_backend.py
 ```
 
 ---
@@ -71,46 +80,23 @@ curl -s -X POST http://<pi-hostname-or-ip>:8080/status \
 
 ---
 
-## 4) Use the included browser UI
+## 4) Run backend as a service on Pi (recommended)
 
-Open `web/pi-music-controller.html` in your browser.
+This repo now includes `systemd/radio-web-backend.service`.
 
-- Set **Backend URL** to `http://<pi-hostname-or-ip>:8080`.
-- Click **Load Config** and **Refresh**.
-- Use Play/Pause/Stop/Volume and `radio-play <bank> <station>` controls.
-
-Tip: If you serve the HTML from the Pi hostname, the page auto-fills backend URL as `http://<that-hostname>:8080`.
-
----
-
-## 5) Run backend as a service on Pi (recommended)
-
-Create `/etc/systemd/system/radio-web-backend.service`:
-
-```ini
-[Unit]
-Description=Radio web backend (local command mode)
-After=network.target mpd.service
-
-[Service]
-User=radio
-WorkingDirectory=/home/radio/radio-headless
-Environment=BIND_HOST=0.0.0.0
-Environment=BIND_PORT=8080
-Environment=RADIO_PLAY_CMD=/home/radio/radio-headless/bin/radio-play
-ExecStart=/usr/bin/python3 /home/radio/radio-headless/web/pi_backend.py
-Restart=on-failure
-
-[Install]
-WantedBy=multi-user.target
-```
-
-Enable/start:
+Install/refresh unit and start:
 
 ```bash
+sudo cp ~/radio-headless/systemd/radio-web-backend.service /etc/systemd/system/
 sudo systemctl daemon-reload
 sudo systemctl enable --now radio-web-backend.service
 sudo systemctl status radio-web-backend.service
+```
+
+Browse to the hosted UI:
+
+```text
+http://<pi-hostname-or-ip>:8080/
 ```
 
 Logs:
@@ -121,7 +107,7 @@ sudo journalctl -u radio-web-backend.service -f
 
 ---
 
-## 6) Troubleshooting
+## 5) Troubleshooting
 
 - `Command not allowed`:
   - whitelist regex in `ALLOWED_COMMANDS` does not match.
@@ -133,4 +119,3 @@ sudo journalctl -u radio-web-backend.service -f
   - verify Pi IP/hostname, firewall, and that backend is bound to `0.0.0.0`.
 - CORS/security tightening:
   - replace `Access-Control-Allow-Origin: *` with your trusted origin.
-
