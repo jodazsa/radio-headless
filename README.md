@@ -165,6 +165,12 @@ sudo journalctl -u radio-update-stations.service -f
 sudo journalctl -u radio-web-backend.service -f
 ```
 
+QoL tip: adjust backend bind/port or file paths in `/etc/default/radio-web-backend`, then restart:
+
+```bash
+sudo systemctl restart radio-web-backend.service
+```
+
 ---
 
 ## Additional Documentation

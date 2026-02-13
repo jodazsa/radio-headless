@@ -1,6 +1,7 @@
 [Unit]
 Description=Radio web backend (API + hosted UI)
-After=network.target mpd.service
+Wants=network-online.target
+After=network-online.target mpd.service
 
 [Service]
 Type=simple
@@ -12,8 +13,9 @@ Environment=RADIO_PLAY_CMD=/usr/local/bin/radio-play
 Environment=RADIO_STATE_FILE=/home/radio/.radio-state
 Environment=WEB_ROOT=/home/radio/radio-headless/web
 Environment=WEB_DEFAULT_PAGE=radio.html
+EnvironmentFile=-/etc/default/radio-web-backend
 ExecStart=/usr/bin/python3 /home/radio/radio-headless/web/pi_backend.py
-Restart=on-failure
+Restart=always
 RestartSec=2
 
 [Install]
