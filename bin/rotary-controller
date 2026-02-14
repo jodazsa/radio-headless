@@ -33,7 +33,8 @@ STATE_PATH = Path("/home/radio/.radio-state")
 STATIONS_PATH = Path("/home/radio/stations.yaml")
 
 # Hardware configuration
-BUTTON_PIN = 24  # Seesaw GPIO for volume encoder button
+SEESAW_BUTTON_PIN = 24  # Seesaw GPIO for volume encoder button
+PLAY_PAUSE_SWITCH_PIN = 24  # BCM GPIO pin for external play/pause on/off switch
 MAX_JUMP = 8    # Max encoder delta per poll (glitch filter)
 I2C_ERR_BACKOFF = 0.2  # Seconds to wait after I2C error
 
@@ -154,6 +155,12 @@ class MpdConnection:
 
     def toggle(self) -> None:
         self.command("pause")
+
+    def play(self) -> None:
+        self.command("play")
+
+    def pause(self) -> None:
+        self.command("pause", 1)
 
 
 def read_bcd_switch(pins: dict) -> int:
@@ -319,7 +326,8 @@ def main():
         station_pins['bit0'], station_pins['bit1'], 
         station_pins['bit2'], station_pins['bit3'],
         bank_pins['bit0'], bank_pins['bit1'],
-        bank_pins['bit2'], bank_pins['bit3']
+        bank_pins['bit2'], bank_pins['bit3'],
+        PLAY_PAUSE_SWITCH_PIN,
     ]
     
     for pin in all_pins:
@@ -327,6 +335,7 @@ def main():
     
     logger.info(f"Station switch GPIOs: {station_pins}")
     logger.info(f"Bank switch GPIOs: {bank_pins}")
+    logger.info(f"Play/pause switch GPIO: {PLAY_PAUSE_SWITCH_PIN}")
     
     # Initialize I2C and Seesaw for volume encoder
     logger.info("Initializing I2C for volume encoder...")
@@ -339,12 +348,13 @@ def main():
         raise SystemExit(1)
     
     # Configure volume encoder button
-    ss.pin_mode(BUTTON_PIN, ss.INPUT_PULLUP)
+    ss.pin_mode(SEESAW_BUTTON_PIN, ss.INPUT_PULLUP)
     
     # Initialize volume encoder
     vol_enc = IncrementalEncoder(ss, vol_idx)
     last_vol_pos = vol_enc.position
-    last_btn = ss.digital_read(BUTTON_PIN)
+    last_btn = ss.digital_read(SEESAW_BUTTON_PIN)
+    play_enabled = GPIO.input(PLAY_PAUSE_SWITCH_PIN) == GPIO.HIGH
     
     # Load initial state
     st = read_state(STATE_PATH)
@@ -379,6 +389,7 @@ def main():
     )
     
     logger.info(f"Initial state: Bank {cur_bank}, Station {cur_station}, Volume {last_volume}")
+    logger.info(f"Initial play/pause switch state: {'ON (play)' if play_enabled else 'OFF (pause)'}")
     logger.info(f"Restart count: {restart_count}")
     
     # Track mute state
@@ -472,7 +483,11 @@ def main():
                 
                 # Play the new station immediately (no settle delay needed)
                 if stations_cache.station_exists(cur_bank, cur_station):
-                    if cur_bank == playing_bank and cur_station == playing_station:
+                    if not play_enabled:
+                        logger.info(
+                            f"Selected Bank {cur_bank}, Station {cur_station} while paused; playback deferred"
+                        )
+                    elif cur_bank == playing_bank and cur_station == playing_station:
                         logger.info(
                             f"Already playing: Bank {cur_bank}, Station {cur_station} (skip restart)"
                         )
@@ -522,7 +537,7 @@ def main():
                     logger.debug(f"Volume: {vol}")
             
             # Handle button press
-            btn = ss.digital_read(BUTTON_PIN)
+            btn = ss.digital_read(SEESAW_BUTTON_PIN)
             if last_btn == 1 and btn == 0:  # Falling edge (button pressed)
                 action = btn_cfg.get("volume_button", "noop")
                 logger.info(f"Volume button pressed, action: {action}")
@@ -540,6 +555,28 @@ def main():
                         logger.info(f"Unmuted, volume: {last_volume}")
             
             last_btn = btn
+
+            # Handle physical play/pause switch (active LOW when OFF)
+            play_switch_state = GPIO.input(PLAY_PAUSE_SWITCH_PIN)
+            new_play_enabled = play_switch_state == GPIO.HIGH
+            if new_play_enabled != play_enabled:
+                play_enabled = new_play_enabled
+                if play_enabled:
+                    if stations_cache.station_exists(cur_bank, cur_station) and (
+                        cur_bank != playing_bank or cur_station != playing_station
+                    ):
+                        logger.info(
+                            f"Play switch ON: playing selected Bank {cur_bank}, Station {cur_station}"
+                        )
+                        sh(["radio-play", str(cur_bank), str(cur_station)])
+                        playing_bank = cur_bank
+                        playing_station = cur_station
+                    else:
+                        logger.info("Play switch ON: resuming playback")
+                        mpd_conn.play()
+                else:
+                    logger.info("Play switch OFF: pausing playback")
+                    mpd_conn.pause()
             
             # Sleep until next poll
             time.sleep(poll_interval)
