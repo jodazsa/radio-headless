@@ -49,6 +49,57 @@ def norm_path(p: str) -> Path:
     return AUDIO_ROOT / p
 
 
+def _normalize_media_name(name: str) -> str:
+    """Normalize file/directory names for fuzzy matching."""
+    s = (name or "").lower().strip()
+    # Legacy folders were sometimes prefixed with an index like "0 Bob Dylan"
+    s = s.lstrip("0123456789").strip(" _-.")
+    return "".join(ch for ch in s if ch.isalnum())
+
+
+def _find_fuzzy_match(target: Path, expect_dir: bool) -> Path | None:
+    """Try to find a matching media item under AUDIO_ROOT when exact path is missing."""
+    target_key = _normalize_media_name(target.stem if target.suffix else target.name)
+    if not target_key:
+        return None
+
+    matches = []
+    if expect_dir:
+        for candidate in AUDIO_ROOT.rglob("*"):
+            if candidate.is_dir() and _normalize_media_name(candidate.name) == target_key:
+                matches.append(candidate)
+    else:
+        for candidate in AUDIO_ROOT.rglob("*"):
+            if not candidate.is_file() or candidate.suffix.lower() not in AUDIO_EXTS:
+                continue
+            if target.suffix and candidate.suffix.lower() != target.suffix.lower():
+                continue
+            if _normalize_media_name(candidate.stem) == target_key:
+                matches.append(candidate)
+
+    if not matches:
+        return None
+
+    # Prefer shorter paths as they tend to be canonical folders/files.
+    matches.sort(key=lambda p: (len(p.parts), str(p).lower()))
+    return matches[0]
+
+
+def resolve_media_path(raw_path: str, expect_dir: bool) -> Path:
+    """Resolve configured station path with fallback fuzzy matching for legacy configs."""
+    resolved = norm_path(raw_path)
+
+    if resolved.exists():
+        return resolved
+
+    fuzzy = _find_fuzzy_match(resolved, expect_dir=expect_dir)
+    if fuzzy:
+        logger.warning(f"Media path fallback: '{resolved}' -> '{fuzzy}'")
+        return fuzzy
+
+    return resolved
+
+
 def mpd_relpath(path: Path) -> str:
     """
     Convert a local filesystem path under AUDIO_ROOT into the MPD library path.
@@ -280,31 +331,31 @@ def main():
     if stype == "file":
         if not isinstance(path, str) or not path.strip():
             die(f"{name}: file station requires 'path' (or 'file')")
-        play_file(norm_path(path), loop=False, random_seek=False)
+        play_file(resolve_media_path(path, expect_dir=False), loop=False, random_seek=False)
         return 0
 
     if stype in ("dir", "dir_in_order"):
         if not isinstance(directory, str) or not directory.strip():
             die(f"{name}: dir station requires 'directory' (or 'dir')")
-        play_dir(norm_path(directory), start_random_track=False)
+        play_dir(resolve_media_path(directory, expect_dir=True), start_random_track=False)
         return 0
 
     if stype == "dir_random_start_then_in_order":
         if not isinstance(directory, str) or not directory.strip():
             die(f"{name}: dir_random_start_then_in_order requires 'directory' (or 'dir')")
-        play_dir(norm_path(directory), start_random_track=True, random_seek=True)
+        play_dir(resolve_media_path(directory, expect_dir=True), start_random_track=True, random_seek=True)
         return 0
 
     if stype == "file_loop":
         if not isinstance(path, str) or not path.strip():
             die(f"{name}: file_loop requires 'path' (or 'file')")
-        play_file(norm_path(path), loop=True, random_seek=False)
+        play_file(resolve_media_path(path, expect_dir=False), loop=True, random_seek=False)
         return 0
 
     if stype == "file_loop_random_start":
         if not isinstance(path, str) or not path.strip():
             die(f"{name}: file_loop_random_start requires 'path' (or 'file')")
-        play_file(norm_path(path), loop=True, random_seek=True)
+        play_file(resolve_media_path(path, expect_dir=False), loop=True, random_seek=True)
         return 0
 
     die(
