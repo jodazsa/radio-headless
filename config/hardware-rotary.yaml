@@ -45,7 +45,7 @@ controls:
   station_max: 9
   volume_min: 0
   volume_max: 100
-  volume_step: 2
+  volume_step: 4
 
 buttons:
   volume_button: "play_pause"  # Volume encoder push button
