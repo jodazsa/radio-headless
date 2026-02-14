@@ -33,6 +33,7 @@ STATIONS_FILE = Path(os.getenv("RADIO_STATIONS_FILE", "/home/radio/stations.yaml
 ALLOWED_COMMANDS = [
     r"^mpc\s+(play|pause|stop|next|prev|volume\s+\d{1,3})$",
     r"^radio-play\s+\d+\s+\d+$",
+    r"^sudo\s+shutdown\s+-h\s+now$",
 ]
 
 HOSTNAME_PATTERN = re.compile(r"^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$")

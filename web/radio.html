@@ -181,6 +181,15 @@
                 0 0 10px rgba(255, 140, 0, 0.5),
                 inset 0 1px 0 rgba(255,255,255,0.15);
         }
+
+        .control-button.danger {
+            color: #ff5c5c;
+            border-color: #663333;
+        }
+
+        .control-button.danger:hover:not(:disabled) {
+            background: linear-gradient(180deg, #4a2a2a 0%, #2a1a1a 100%);
+        }
         
         .tuner-section {
             display: flex;
@@ -482,6 +491,7 @@
         <div class="controls-row">
             <button class="control-button" id="playBtn" onclick="sendCommand('mpc play')" title="Play">▶</button>
             <button class="control-button" id="pauseBtn" onclick="sendCommand('mpc pause')" title="Pause">❚❚</button>
+            <button class="control-button danger" id="shutdownBtn" onclick="requestShutdown()" title="Shutdown">⏻</button>
         </div>
         
         <div class="tuner-section">
@@ -905,6 +915,14 @@
                     } else if (command === 'mpc pause') {
                         updateStationDisplay('PAUSED');
                         updatePlaybackButtonHighlights(false, true);
+                    } else if (command === 'sudo shutdown -h now') {
+                        updateStationDisplay('SHUTTING DOWN');
+                        updateStatus('GOODBYE', 'success');
+                        if (statusUpdateInterval) {
+                            clearInterval(statusUpdateInterval);
+                            statusUpdateInterval = null;
+                        }
+                        updateConnectionIndicator(false, 'SHUTTING DOWN');
                     }
                 } else {
                     let errorMsg = '';
@@ -943,6 +961,14 @@
                 isCommandPending = false;
                 setButtonsDisabled(false);
             });
+        }
+
+        function requestShutdown() {
+            const confirmed = window.confirm('Power off this radio now?');
+            if (!confirmed) {
+                return;
+            }
+            sendCommand('sudo shutdown -h now');
         }
         
         window.addEventListener('load', () => {
