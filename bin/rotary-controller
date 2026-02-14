@@ -391,6 +391,12 @@ def main():
     logger.info(f"Initial state: Bank {cur_bank}, Station {cur_station}, Volume {last_volume}")
     logger.info(f"Initial play/pause switch state: {'ON (play)' if play_enabled else 'OFF (pause)'}")
     logger.info(f"Restart count: {restart_count}")
+
+    # Enforce physical play/pause switch state immediately on startup.
+    # This ensures OFF always pauses playback even after controller restarts.
+    if not play_enabled:
+        logger.info("Startup play/pause switch is OFF: pausing playback")
+        mpd_conn.pause()
     
     # Track mute state
     muted = False
