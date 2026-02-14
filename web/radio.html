@@ -172,6 +172,15 @@
             opacity: 0.5;
             cursor: not-allowed;
         }
+
+        .control-button.active-state {
+            border-color: #ff8c00;
+            background: linear-gradient(180deg, #4a4a4a 0%, #2d2d2d 100%);
+            box-shadow:
+                0 2px 0 #000,
+                0 0 10px rgba(255, 140, 0, 0.5),
+                inset 0 1px 0 rgba(255,255,255,0.15);
+        }
         
         .tuner-section {
             display: flex;
@@ -790,6 +799,14 @@
             dot.className = 'indicator-dot ' + (connected ? 'connected' : 'disconnected');
             text.textContent = message || (connected ? 'CONNECTED' : 'DISCONNECTED');
         }
+
+        function updatePlaybackButtonHighlights(isPlaying, isPaused) {
+            const playBtn = document.getElementById('playBtn');
+            const pauseBtn = document.getElementById('pauseBtn');
+
+            playBtn.classList.toggle('active-state', Boolean(isPlaying));
+            pauseBtn.classList.toggle('active-state', Boolean(isPaused));
+        }
         
         function fetchRadioState() {
             fetch(`${BACKEND_URL}/state`, {
@@ -840,6 +857,8 @@
                         updateStationDisplay('READY');
                         updateStatus('', 'normal');
                     }
+
+                    updatePlaybackButtonHighlights(data.is_playing, data.is_paused);
                 } else {
                     updateConnectionIndicator(false, data.error_type === 'timeout' ? 'TIMEOUT' : 'ERROR');
                 }
@@ -854,8 +873,12 @@
             if (statusUpdateInterval) {
                 clearInterval(statusUpdateInterval);
             }
-            statusUpdateInterval = setInterval(fetchCurrentStatus, 3000);
+            statusUpdateInterval = setInterval(() => {
+                fetchCurrentStatus();
+                fetchRadioState();
+            }, 3000);
             fetchCurrentStatus();
+            fetchRadioState();
         }
         
         function sendCommand(command) {
@@ -881,10 +904,7 @@
                         startStatusUpdates();
                     } else if (command === 'mpc pause') {
                         updateStationDisplay('PAUSED');
-                        if (statusUpdateInterval) {
-                            clearInterval(statusUpdateInterval);
-                            statusUpdateInterval = null;
-                        }
+                        updatePlaybackButtonHighlights(false, true);
                     }
                 } else {
                     let errorMsg = '';
@@ -926,11 +946,10 @@
         }
         
         window.addEventListener('load', () => {
-                        loadFavorites();
+            loadFavorites();
             updateKeypadHighlights();
             setTimeout(() => {
-                fetchCurrentStatus();
-                fetchRadioState();
+                startStatusUpdates();
             }, 1000);
         });
     </script>
