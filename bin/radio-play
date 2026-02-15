@@ -52,6 +52,23 @@ def norm_path(p: str) -> Path:
 def _normalize_media_name(name: str) -> str:
     """Normalize file/directory names for fuzzy matching."""
     s = (name or "").lower().strip()
+
+    # Treat common roman numeral variants as numeric equivalents so
+    # "GTA V" can still match files named "GTA 5" (and vice-versa).
+    roman_to_arabic = {
+        "i": "1",
+        "ii": "2",
+        "iii": "3",
+        "iv": "4",
+        "v": "5",
+        "vi": "6",
+        "vii": "7",
+        "viii": "8",
+        "ix": "9",
+        "x": "10",
+    }
+    s = " ".join(roman_to_arabic.get(token, token) for token in s.split())
+
     # Legacy folders were sometimes prefixed with an index like "0 Bob Dylan"
     s = s.lstrip("0123456789").strip(" _-.")
     return "".join(ch for ch in s if ch.isalnum())
