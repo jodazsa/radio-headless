@@ -488,17 +488,19 @@ def main():
                 write_state(STATE_PATH, current_bank=cur_bank, current_station=cur_station)
                 
                 # Play the new station immediately (no settle delay needed)
+                # even if the play/pause switch is currently OFF.
                 if stations_cache.station_exists(cur_bank, cur_station):
-                    if not play_enabled:
-                        logger.info(
-                            f"Selected Bank {cur_bank}, Station {cur_station} while paused; playback deferred"
-                        )
-                    elif cur_bank == playing_bank and cur_station == playing_station:
+                    if cur_bank == playing_bank and cur_station == playing_station:
                         logger.info(
                             f"Already playing: Bank {cur_bank}, Station {cur_station} (skip restart)"
                         )
                     else:
-                        logger.info(f"Playing: Bank {cur_bank}, Station {cur_station}")
+                        if not play_enabled:
+                            logger.info(
+                                f"Selected Bank {cur_bank}, Station {cur_station} while paused; forcing playback"
+                            )
+                        else:
+                            logger.info(f"Playing: Bank {cur_bank}, Station {cur_station}")
                         sh(["radio-play", str(cur_bank), str(cur_station)])
                         playing_bank = cur_bank
                         playing_station = cur_station
