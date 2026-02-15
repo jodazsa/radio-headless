@@ -396,6 +396,28 @@
         .volume-section {
             margin-bottom: 20px;
         }
+
+        .source-section {
+            margin-bottom: 20px;
+        }
+
+        .source-control {
+            background: #1a1a1a;
+            padding: 15px;
+            border-radius: 6px;
+            border: 2px solid #333;
+        }
+
+        .source-select {
+            width: 100%;
+            background: #0d0d0d;
+            color: #ff8c00;
+            border: 1px solid #444;
+            border-radius: 4px;
+            padding: 10px;
+            font-family: 'Courier New', monospace;
+            font-size: 14px;
+        }
         
         .volume-label {
             color: #ff8c00;
@@ -547,6 +569,15 @@
                 <span class="volume-value" id="volumeValue">30</span>
             </div>
         </div>
+
+        <div class="source-section">
+            <div class="volume-label">Station Set</div>
+            <div class="source-control">
+                <select id="stationSourceSelect" class="source-select">
+                    <option value="">Loading station sets...</option>
+                </select>
+            </div>
+        </div>
     </div>
 
     <script>
@@ -571,6 +602,7 @@
         
         // Tuner change debouncing
         let tunerDebounceTimer = null;
+        let stationSourceOptions = [];
         
         // Config is not needed for the '(1)' backend
         function fetchConfig() { /* no-op */ }
@@ -700,6 +732,7 @@
         // Volume slider with debouncing
         const volumeSlider = document.getElementById('volumeSlider');
         const volumeValue = document.getElementById('volumeValue');
+        const stationSourceSelect = document.getElementById('stationSourceSelect');
         
         volumeSlider.addEventListener('input', function(e) {
             volumeValue.textContent = e.target.value;
@@ -712,6 +745,66 @@
                 sendCommand(`mpc volume ${e.target.value}`);
             }, 500);
         });
+
+        stationSourceSelect.addEventListener('change', function(e) {
+            if (e.target.value === '') {
+                return;
+            }
+            selectStationSource(Number(e.target.value));
+        });
+
+        function loadStationSourceOptions() {
+            fetch(`${BACKEND_URL}/stations/options`)
+            .then(response => response.json())
+            .then(data => {
+                if (!data.success || !Array.isArray(data.options)) {
+                    throw new Error('Invalid station source response');
+                }
+
+                stationSourceOptions = data.options;
+                stationSourceSelect.innerHTML = '';
+                stationSourceOptions.forEach(option => {
+                    const el = document.createElement('option');
+                    el.value = option.index;
+                    el.textContent = option.name;
+                    stationSourceSelect.appendChild(el);
+                });
+                stationSourceSelect.value = '0';
+            })
+            .catch(err => {
+                stationSourceSelect.innerHTML = '<option value="">Station sets unavailable</option>';
+                stationSourceSelect.disabled = true;
+                console.log('Could not load station source options:', err);
+            });
+        }
+
+        function selectStationSource(index) {
+            stationSourceSelect.disabled = true;
+            updateStatus('UPDATING STATIONS...', 'pending');
+
+            fetch(`${BACKEND_URL}/stations/select`, {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({index: index})
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    updateStatus(`LOADED ${data.name.toUpperCase()}`, 'success');
+                    playCurrentStation();
+                } else {
+                    updateStatus('STATION SET FAILED', 'error');
+                    console.log('Station set update failed:', data.error);
+                }
+            })
+            .catch(err => {
+                updateStatus('STATION SET ERROR', 'error');
+                console.log('Station set update error:', err);
+            })
+            .finally(() => {
+                stationSourceSelect.disabled = false;
+            });
+        }
         
         function setBank(bank) {
             currentBank = bank;
@@ -973,6 +1066,7 @@
         
         window.addEventListener('load', () => {
             loadFavorites();
+            loadStationSourceOptions();
             updateKeypadHighlights();
             setTimeout(() => {
                 startStatusUpdates();
