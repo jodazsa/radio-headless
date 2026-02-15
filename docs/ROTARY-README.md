@@ -141,6 +141,7 @@ Each switch position (0-9) is encoded as a 4-bit binary pattern:
 
 ### Behavior
 - **Instant switching**: When you turn either switch, the radio immediately plays the new bank/station
+- **Knobs always win**: Turning bank/station starts playback even if play/pause is currently OFF
 - **No settle delay**: Unlike encoders, switches give deterministic positions
 - **State persistence**: Last position is saved to `/home/radio/.radio-state`
 - **Volume control**: Single encoder with same behavior as original radio
