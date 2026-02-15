@@ -66,5 +66,5 @@ polling:
 auto_update:
   # Automatically update stations.yaml from GitHub
   enabled: true
-  github_url: "https://raw.githubusercontent.com/jodazsa/radio/refs/heads/main/config/stations.yaml"
+  github_url: "https://raw.githubusercontent.com/jodazsa/radio-headless/refs/heads/main/config/stations.yaml"
   local_path: "/home/radio/stations.yaml"
