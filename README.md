@@ -276,7 +276,7 @@ When the Pi is offline for ~60 seconds at boot (connectivity check fails), `radi
 3. if online: remove `/var/lib/radio/setup-mode`
 4. if offline: re-enable setup AP and keep setup mode
 
-The monitor also exits setup mode automatically when connectivity is restored (it disables the AP and removes `/var/lib/radio/setup-mode`).
+The monitor also exits setup mode automatically when connectivity is restored, but only after the setup AP is confirmed down (then it removes `/var/lib/radio/setup-mode`).
 
 ### Minimal test plan
 
