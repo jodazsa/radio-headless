@@ -106,10 +106,21 @@ enable_ap() {
 
 disable_ap() {
   ensure_nmcli || return 1
-  if is_ap_active; then
-    nmcli connection down "$SETUP_AP_CONNECTION" >/dev/null 2>&1 || true
-    log "Disabled setup AP '${SETUP_AP_CONNECTION}'"
+
+  if ! is_ap_active; then
+    return 0
   fi
+
+  if ! nmcli connection down "$SETUP_AP_CONNECTION" >/dev/null 2>&1; then
+    log "Failed to deactivate setup AP '${SETUP_AP_CONNECTION}'"
+  fi
+
+  if is_ap_active; then
+    log "Setup AP '${SETUP_AP_CONNECTION}' is still active"
+    return 1
+  fi
+
+  log "Disabled setup AP '${SETUP_AP_CONNECTION}'"
 }
 
 has_default_route() {
@@ -162,12 +173,15 @@ monitor() {
     now="$(date +%s)"
 
     if is_online; then
-      offline_since=0
-      sleep "$CHECK_INTERVAL_SECONDS"
-      continue
-    fi
-
-    if has_default_route; then
+      if is_ap_active || [[ -f "$SETUP_MARKER_FILE" ]]; then
+        if disable_ap; then
+          remove_marker
+          log "Connectivity restored; exited setup AP mode"
+          last_transition="$now"
+        else
+          log "Connectivity restored but setup AP remains active; keeping setup marker"
+        fi
+      fi
       offline_since=0
       sleep "$CHECK_INTERVAL_SECONDS"
       continue
@@ -175,7 +189,7 @@ monitor() {
 
     if (( offline_since == 0 )); then
       offline_since="$now"
-      log "No default route and connectivity check failed; starting offline grace timer"
+      log "Connectivity check failed; starting offline grace timer"
       sleep "$CHECK_INTERVAL_SECONDS"
       continue
     fi
