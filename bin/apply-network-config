@@ -1,6 +1,9 @@
 #!/bin/bash
 set -euo pipefail
 
+SETUP_HELPER="${RADIO_SETUP_HELPER:-/usr/local/lib/radio/setup-ap-manager}"
+CONNECT_TIMEOUT_SECONDS="${RADIO_SETUP_JOIN_TIMEOUT_SECONDS:-60}"
+
 if [[ "${EUID}" -ne 0 ]]; then
   echo '{"success":false,"error":"must run as root"}'
   exit 1
@@ -45,6 +48,11 @@ if ! command -v hostnamectl >/dev/null 2>&1; then
   exit 1
 fi
 
+if [[ ! -x "$SETUP_HELPER" ]]; then
+  echo '{"success":false,"error":"setup helper missing"}'
+  exit 1
+fi
+
 CONN_NAME="radio-managed-${SSID// /-}"
 
 nmcli connection delete "$CONN_NAME" >/dev/null 2>&1 || true
@@ -59,6 +67,22 @@ else
   printf '127.0.1.1\t%s\n' "$HOSTNAME" >> /etc/hosts
 fi
 
-nmcli connection up "$CONN_NAME" >/dev/null || true
+# Tear down setup AP before attempting station join.
+"$SETUP_HELPER" disable || true
 
-echo '{"success":true,"message":"Settings applied. Reconnecting to Wi-Fi now."}'
+if ! "$SETUP_HELPER" join "$CONN_NAME"; then
+  "$SETUP_HELPER" enable || true
+  echo '{"success":false,"error":"failed to activate station wifi","error_type":"join_failed"}'
+  exit 1
+fi
+
+if "$SETUP_HELPER" wait-online "$CONNECT_TIMEOUT_SECONDS"; then
+  rm -f /var/lib/radio/setup-mode
+  echo '{"success":true,"message":"Settings applied. Joined Wi-Fi and exited setup mode."}'
+  exit 0
+fi
+
+"$SETUP_HELPER" enable || true
+
+echo '{"success":false,"error":"wifi connectivity check failed; setup AP re-enabled","error_type":"connectivity_failed"}'
+exit 1

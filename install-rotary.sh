@@ -149,8 +149,11 @@ sudo copy_file_safe web/setup.html /home/radio/radio-headless/web/
 sudo chown -R radio:radio /home/radio/radio-headless/web
 
 
-# Install privileged setup helper + sudoers policy
+# Install setup AP manager + privileged setup helper + sudoers policy
 sudo mkdir -p /usr/local/lib/radio
+sudo copy_file_safe bin/setup-ap-manager /usr/local/lib/radio/setup-ap-manager
+sudo chown root:root /usr/local/lib/radio/setup-ap-manager
+sudo chmod 750 /usr/local/lib/radio/setup-ap-manager
 sudo copy_file_safe bin/apply-network-config /usr/local/lib/radio/apply-network-config
 sudo chown root:root /usr/local/lib/radio/apply-network-config
 sudo chmod 750 /usr/local/lib/radio/apply-network-config
@@ -163,6 +166,7 @@ sudo copy_file_safe systemd/rotary-controller.service /etc/systemd/system/
 sudo copy_file_safe systemd/radio-update-stations.service /etc/systemd/system/
 sudo copy_file_safe systemd/radio-update-stations.timer /etc/systemd/system/
 sudo copy_file_safe systemd/radio-web-backend.service /etc/systemd/system/
+sudo copy_file_safe systemd/radio-setup-monitor.service /etc/systemd/system/
 
 # Install backend override env file if missing (QoL for custom port/paths)
 if [ ! -f /etc/default/radio-web-backend ]; then
@@ -185,6 +189,7 @@ sudo systemctl enable rotary-controller.service
 sudo systemctl enable mpd.service
 sudo systemctl enable --now radio-update-stations.timer
 sudo systemctl enable --now radio-web-backend.service
+sudo systemctl enable --now radio-setup-monitor.service
 
 # 9. Verify I2C hardware detection
 echo ""

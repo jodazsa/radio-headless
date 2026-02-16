@@ -19,7 +19,8 @@ A headless Raspberry Pi radio stack built around **MPD**, a **rotary hardware in
 11. [Auto-Update Stations](#auto-update-stations)
 12. [Local Music / Offline Content](#local-music--offline-content)
 13. [Troubleshooting and Diagnostics](#troubleshooting-and-diagnostics)
-14. [Extended Documentation](#extended-documentation)
+14. [Setup AP Fallback](#setup-ap-fallback)
+15. [Extended Documentation](#extended-documentation)
 
 ---
 
@@ -165,6 +166,7 @@ sudo journalctl -u radio-web-backend.service -f
 - `systemd/radio-update-stations.service`
 - `systemd/radio-update-stations.timer`
 - `systemd/radio-web-backend.service`
+- `systemd/radio-setup-monitor.service`
 
 ### Web UI/backend (`web/`)
 
@@ -222,6 +224,7 @@ auto_update:
 - `rotary-controller.service` – hardware -> playback control loop
 - `mpd.service` – playback daemon
 - `radio-web-backend.service` – optional HTTP backend for browser control
+- `radio-setup-monitor.service` – automatic setup AP fallback monitor
 
 ### Update automation
 
@@ -249,10 +252,36 @@ Primary files:
 - `web/radio.html`
 - `web/pi_backend.py`
 - `systemd/radio-web-backend.service`
+- `systemd/radio-setup-monitor.service`
 
 See complete setup and troubleshooting in `docs/WEB-CONTROL.md`.
 
 ---
+
+## Setup AP Fallback
+
+When the Pi is offline for ~60 seconds at boot (no default route and connectivity check fails), `radio-setup-monitor.service` automatically enables setup mode:
+
+- Creates `/var/lib/radio/setup-mode`
+- Brings up persistent NetworkManager AP connection `radio-setup-ap` on `wlan0`
+- Uses SSID `RADIO-SETUP-<last4_of_wlan0_mac>`
+- Uses WPA2 passphrase from `RADIO_SETUP_AP_PASSWORD` (default in `setup-ap-manager`)
+- Pins AP gateway to `192.168.4.1/24` with `ipv4.method=shared`
+- Keeps setup UI/backend reachable at `http://192.168.4.1:8080/setup`
+
+`/setup/apply` behavior:
+
+1. stop setup AP
+2. attempt configured station Wi-Fi
+3. if online: remove `/var/lib/radio/setup-mode`
+4. if offline: re-enable setup AP and keep setup mode
+
+### Minimal test plan
+
+1. **Boot offline:** power on with no usable Wi-Fi; after ~60 seconds AP `RADIO-SETUP-XXXX` appears.
+2. **Provision valid Wi-Fi:** submit `/setup/apply` with correct credentials; AP disappears and Pi joins station Wi-Fi.
+3. **Provision wrong password:** submit bad credentials; station join fails and setup AP reappears.
+
 
 ## Rotary Hardware Variant Notes
 

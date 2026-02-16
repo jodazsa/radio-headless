@@ -1,0 +1,13 @@
+[Unit]
+Description=Radio setup AP connectivity monitor
+After=NetworkManager.service
+Wants=NetworkManager.service
+
+[Service]
+Type=simple
+ExecStart=/usr/local/lib/radio/setup-ap-manager monitor
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
