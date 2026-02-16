@@ -179,3 +179,75 @@ sudo systemctl restart radio-web-backend.service
 - `docs/MUSIC-TRANSFER.md` – loading offline music content
 - `docs/AUTO-UPDATE.md` – update automation details
 - `docs/WEB-CONTROL.md` – run the Pi-hosted web backend and browser UI for network control
+
+---
+
+## Customize `stations.yaml` Source + Useful User Tips
+
+The updater (`/usr/local/bin/update-stations`) pulls stations from the URL configured in:
+
+- `/home/radio/hardware-rotary.yaml` → `auto_update.github_url`
+
+### Change the source URL (use your own `stations.yaml`)
+
+1. Open the config:
+
+```bash
+sudo nano /home/radio/hardware-rotary.yaml
+```
+
+2. Edit the `auto_update` section:
+
+```yaml
+auto_update:
+  enabled: true
+  github_url: "https://raw.githubusercontent.com/YOUR_USERNAME/YOUR_REPO/main/config/stations.yaml"
+  local_path: "/home/radio/stations.yaml"
+```
+
+3. Save, then run an update immediately:
+
+```bash
+sudo systemctl start radio-update-stations.service
+tail -n 80 /home/radio/logs/update-stations.log
+```
+
+If you prefer to manage stations only locally (no remote overwrite), set:
+
+```yaml
+auto_update:
+  enabled: false
+```
+
+### Quick user tips
+
+- **Validate your URL first:**
+
+  ```bash
+  curl -I "https://raw.githubusercontent.com/YOUR_USERNAME/YOUR_REPO/main/config/stations.yaml"
+  ```
+
+  You want an HTTP `200 OK` response.
+
+- **Manual local edits still work:** edit `/home/radio/stations.yaml` directly, then restart:
+
+  ```bash
+  sudo systemctl restart rotary-controller.service
+  ```
+
+- **Backups are automatic:** each successful remote update first saves the previous file under `/home/radio/backups/` (last 10 kept).
+
+- **Recover quickly if a bad list is deployed:**
+
+  ```bash
+  ls -lh /home/radio/backups/
+  sudo cp /home/radio/backups/stations_YYYYMMDD_HHMMSS.yaml /home/radio/stations.yaml
+  sudo chown radio:radio /home/radio/stations.yaml
+  sudo systemctl restart rotary-controller.service
+  ```
+
+- **Check when auto-update will run next:**
+
+  ```bash
+  systemctl list-timers radio-update-stations.timer
+  ```
