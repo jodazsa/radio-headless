@@ -397,6 +397,143 @@
             margin-bottom: 20px;
         }
 
+        .directory-section {
+            margin-bottom: 10px;
+            background: #1a1a1a;
+            border: 2px solid #333;
+            border-radius: 6px;
+            padding: 15px;
+        }
+
+        .directory-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 12px;
+        }
+
+        .directory-label {
+            color: #ff8c00;
+            font-size: 12px;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            font-weight: bold;
+        }
+
+        .refresh-list-button {
+            background: linear-gradient(180deg, #2a2a2a 0%, #1a1a1a 100%);
+            border: 2px solid #444;
+            color: #ff8c00;
+            padding: 8px 12px;
+            border-radius: 6px;
+            font-size: 12px;
+            font-weight: bold;
+            cursor: pointer;
+            letter-spacing: 1px;
+        }
+
+        .refresh-list-button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .directory-grid {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 16px;
+        }
+
+        .bank-directory-title {
+            color: #ff8c00;
+            font-size: 14px;
+            font-weight: bold;
+            margin-bottom: 6px;
+        }
+
+        .bank-station-list {
+            color: #ddd;
+            font-family: 'Courier New', monospace;
+            font-size: 13px;
+            line-height: 1.4;
+            list-style: none;
+        }
+
+        .bank-station-list li {
+            margin-bottom: 2px;
+        }
+
+        .directory-message {
+            color: #bbb;
+            font-size: 12px;
+            font-family: 'Courier New', monospace;
+        }
+
+        .source-section {
+            margin-top: 12px;
+            background: #1a1a1a;
+            border: 2px solid #333;
+            border-radius: 6px;
+            padding: 15px;
+        }
+
+        .source-label {
+            color: #ff8c00;
+            font-size: 12px;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            font-weight: bold;
+            margin-bottom: 10px;
+        }
+
+        .source-controls {
+            display: flex;
+            gap: 8px;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+
+        .source-input {
+            flex: 1;
+            min-width: 260px;
+            background: #0d0d0d;
+            border: 1px solid #444;
+            color: #ddd;
+            font-family: 'Courier New', monospace;
+            font-size: 13px;
+            border-radius: 4px;
+            padding: 10px;
+        }
+
+        .source-submit {
+            background: linear-gradient(180deg, #2a2a2a 0%, #1a1a1a 100%);
+            border: 2px solid #444;
+            color: #ff8c00;
+            padding: 10px 14px;
+            border-radius: 6px;
+            font-size: 12px;
+            font-weight: bold;
+            cursor: pointer;
+            letter-spacing: 1px;
+        }
+
+        .source-submit:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .source-message {
+            margin-top: 8px;
+            color: #bbb;
+            font-size: 12px;
+            font-family: 'Courier New', monospace;
+        }
+
+        @media (max-width: 700px) {
+            .directory-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+
         .volume-label {
             color: #ff8c00;
             font-size: 12px;
@@ -548,6 +685,24 @@
             </div>
         </div>
 
+        <div class="directory-section">
+            <div class="directory-header">
+                <div class="directory-label">Station Directory</div>
+                <button class="refresh-list-button" id="refreshDirectoryBtn" onclick="fetchStationDirectory()">Refresh List</button>
+            </div>
+            <div class="directory-message" id="directoryMessage">Loading station directory...</div>
+            <div class="directory-grid" id="stationDirectory"></div>
+        </div>
+
+        <div class="source-section">
+            <div class="source-label">Change Stations Source</div>
+            <div class="source-controls">
+                <input type="text" class="source-input" id="stationsSourceInput" placeholder="https://raw.githubusercontent.com/.../stations.yaml">
+                <button class="source-submit" id="stationsSourceSubmit" onclick="submitStationsSource()">Submit</button>
+            </div>
+            <div class="source-message" id="stationsSourceMessage">Loading current source...</div>
+        </div>
+
     </div>
 
     <script>
@@ -575,6 +730,122 @@
         
         // Config is not needed for the '(1)' backend
         function fetchConfig() { /* no-op */ }
+
+        function fetchStationDirectory() {
+            const refreshBtn = document.getElementById('refreshDirectoryBtn');
+            const messageElement = document.getElementById('directoryMessage');
+            const directoryElement = document.getElementById('stationDirectory');
+
+            refreshBtn.disabled = true;
+            messageElement.textContent = 'Loading station directory...';
+
+            fetch(`${BACKEND_URL}/stations`)
+                .then(response => response.json())
+                .then(data => {
+                    if (!data.success || !Array.isArray(data.banks)) {
+                        throw new Error(data.error || 'Invalid station list response');
+                    }
+
+                    renderStationDirectory(data.banks);
+                    messageElement.textContent = `Updated: ${new Date().toLocaleTimeString()}`;
+                })
+                .catch(err => {
+                    directoryElement.innerHTML = '';
+                    messageElement.textContent = `Unable to load directory: ${err.message}`;
+                })
+                .finally(() => {
+                    refreshBtn.disabled = false;
+                });
+        }
+
+        function renderStationDirectory(banks) {
+            const directoryElement = document.getElementById('stationDirectory');
+            directoryElement.innerHTML = '';
+
+            banks.forEach(bank => {
+                const column = document.createElement('div');
+
+                const title = document.createElement('div');
+                title.className = 'bank-directory-title';
+                title.textContent = `Bank ${bank.bank}: ${bank.name}`;
+                column.appendChild(title);
+
+                const list = document.createElement('ul');
+                list.className = 'bank-station-list';
+
+                if (Array.isArray(bank.stations) && bank.stations.length > 0) {
+                    bank.stations.forEach(station => {
+                        const item = document.createElement('li');
+                        item.textContent = `${station.station} - ${station.name}`;
+                        list.appendChild(item);
+                    });
+                } else {
+                    const item = document.createElement('li');
+                    item.textContent = 'No stations configured';
+                    list.appendChild(item);
+                }
+
+                column.appendChild(list);
+                directoryElement.appendChild(column);
+            });
+        }
+
+        function loadStationsSource() {
+            const input = document.getElementById('stationsSourceInput');
+            const message = document.getElementById('stationsSourceMessage');
+
+            message.textContent = 'Loading current source...';
+
+            fetch(`${BACKEND_URL}/stations/source`)
+                .then(response => response.json())
+                .then(data => {
+                    if (!data.success) {
+                        throw new Error(data.error || 'Could not load stations source');
+                    }
+
+                    input.value = data.github_url || '';
+                    message.textContent = 'Current source loaded';
+                })
+                .catch(err => {
+                    message.textContent = `Unable to load current source: ${err.message}`;
+                });
+        }
+
+        function submitStationsSource() {
+            const input = document.getElementById('stationsSourceInput');
+            const submitButton = document.getElementById('stationsSourceSubmit');
+            const message = document.getElementById('stationsSourceMessage');
+            const githubUrl = input.value.trim();
+
+            if (!githubUrl) {
+                message.textContent = 'Please enter a source URL';
+                return;
+            }
+
+            submitButton.disabled = true;
+            message.textContent = 'Saving source...';
+
+            fetch(`${BACKEND_URL}/stations/source`, {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({github_url: githubUrl})
+            })
+                .then(response => response.json())
+                .then(data => {
+                    if (!data.success) {
+                        throw new Error(data.error || 'Could not save stations source');
+                    }
+
+                    input.value = data.github_url || githubUrl;
+                    message.textContent = 'Stations source updated';
+                })
+                .catch(err => {
+                    message.textContent = `Unable to save source: ${err.message}`;
+                })
+                .finally(() => {
+                    submitButton.disabled = false;
+                });
+        }
 
         function debouncedPlayStation() {
             if (tunerDebounceTimer) {
@@ -975,6 +1246,14 @@
         window.addEventListener('load', () => {
             loadFavorites();
             updateKeypadHighlights();
+            fetchStationDirectory();
+            loadStationsSource();
+            document.getElementById('stationsSourceInput').addEventListener('keydown', (event) => {
+                if (event.key === 'Enter') {
+                    event.preventDefault();
+                    submitStationsSource();
+                }
+            });
             setTimeout(() => {
                 startStatusUpdates();
             }, 1000);

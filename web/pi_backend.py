@@ -29,6 +29,7 @@ SETUP_PAGE = os.getenv("WEB_SETUP_PAGE", "setup.html")
 SETUP_MARKER_FILE = Path(os.getenv("RADIO_SETUP_MARKER_FILE", "/var/lib/radio/setup-mode"))
 SETUP_APPLY_CMD = os.getenv("RADIO_SETUP_APPLY_CMD", "/usr/bin/sudo /usr/local/lib/radio/apply-network-config")
 STATIONS_FILE = Path(os.getenv("RADIO_STATIONS_FILE", "/home/radio/stations.yaml"))
+HARDWARE_CONFIG_FILE = Path(os.getenv("RADIO_HARDWARE_CONFIG_FILE", "/home/radio/hardware-rotary.yaml"))
 
 ALLOWED_COMMANDS = [
     r"^mpc\s+(play|pause|stop|next|prev|volume\s+\d{1,3})$",
@@ -142,6 +143,14 @@ class CommandHandler(BaseHTTPRequestHandler):
             )
             return
 
+        if self.path == "/stations":
+            self._send_stations_directory()
+            return
+
+        if self.path == "/stations/source":
+            self._send_stations_source()
+            return
+
         if self.path == "/setup/config":
             self.send_json_response(
                 200,
@@ -219,6 +228,13 @@ class CommandHandler(BaseHTTPRequestHandler):
             if data is None:
                 return
             self._apply_setup(data)
+            return
+
+        if self.path == "/stations/source":
+            data = self._read_json_body(optional=False)
+            if data is None:
+                return
+            self._update_stations_source(data)
             return
 
         self.send_error(404)
@@ -363,6 +379,176 @@ class CommandHandler(BaseHTTPRequestHandler):
             self.send_json_response(504, {"success": False, "error": "Timeout getting status", "error_type": "timeout"})
         except FileNotFoundError as exc:
             self.send_json_response(500, {"success": False, "error": f"Command not found: {exc}", "error_type": "command_not_found"})
+
+    def _send_stations_source(self):
+        try:
+            config = yaml.safe_load(HARDWARE_CONFIG_FILE.read_text(encoding="utf-8")) or {}
+        except FileNotFoundError:
+            self.send_json_response(
+                404,
+                {
+                    "success": False,
+                    "error": f"Hardware config file not found: {HARDWARE_CONFIG_FILE}",
+                    "error_type": "hardware_config_not_found",
+                },
+            )
+            return
+        except (OSError, yaml.YAMLError) as exc:
+            self.send_json_response(
+                500,
+                {
+                    "success": False,
+                    "error": str(exc),
+                    "error_type": "hardware_config_read_error",
+                },
+            )
+            return
+
+        auto_update = config.get("auto_update", {})
+        if not isinstance(auto_update, dict):
+            auto_update = {}
+
+        self.send_json_response(
+            200,
+            {
+                "success": True,
+                "github_url": str(auto_update.get("github_url", "") or ""),
+            },
+        )
+
+    def _update_stations_source(self, data: dict[str, Any]):
+        github_url = str(data.get("github_url", "") or "").strip()
+        if not github_url:
+            self.send_json_response(
+                400,
+                {
+                    "success": False,
+                    "error": "github_url is required",
+                    "error_type": "invalid_request",
+                },
+            )
+            return
+
+        if not (github_url.startswith("http://") or github_url.startswith("https://")):
+            self.send_json_response(
+                400,
+                {
+                    "success": False,
+                    "error": "github_url must start with http:// or https://",
+                    "error_type": "invalid_request",
+                },
+            )
+            return
+
+        try:
+            config = yaml.safe_load(HARDWARE_CONFIG_FILE.read_text(encoding="utf-8")) or {}
+        except FileNotFoundError:
+            self.send_json_response(
+                404,
+                {
+                    "success": False,
+                    "error": f"Hardware config file not found: {HARDWARE_CONFIG_FILE}",
+                    "error_type": "hardware_config_not_found",
+                },
+            )
+            return
+        except (OSError, yaml.YAMLError) as exc:
+            self.send_json_response(
+                500,
+                {
+                    "success": False,
+                    "error": str(exc),
+                    "error_type": "hardware_config_read_error",
+                },
+            )
+            return
+
+        if not isinstance(config, dict):
+            config = {}
+
+        auto_update = config.get("auto_update")
+        if not isinstance(auto_update, dict):
+            auto_update = {}
+            config["auto_update"] = auto_update
+
+        auto_update["github_url"] = github_url
+
+        try:
+            HARDWARE_CONFIG_FILE.write_text(
+                yaml.safe_dump(config, sort_keys=False, default_flow_style=False),
+                encoding="utf-8",
+            )
+        except OSError as exc:
+            self.send_json_response(
+                500,
+                {
+                    "success": False,
+                    "error": str(exc),
+                    "error_type": "hardware_config_write_error",
+                },
+            )
+            return
+
+        self.send_json_response(200, {"success": True, "github_url": github_url})
+
+    def _send_stations_directory(self):
+        try:
+            data = yaml.safe_load(STATIONS_FILE.read_text(encoding="utf-8")) or {}
+        except FileNotFoundError:
+            self.send_json_response(
+                404,
+                {
+                    "success": False,
+                    "error": f"Stations file not found: {STATIONS_FILE}",
+                    "error_type": "stations_not_found",
+                },
+            )
+            return
+        except (OSError, yaml.YAMLError) as exc:
+            self.send_json_response(
+                500,
+                {
+                    "success": False,
+                    "error": str(exc),
+                    "error_type": "stations_read_error",
+                },
+            )
+            return
+
+        banks = data.get("banks", {})
+        if not isinstance(banks, dict):
+            self.send_json_response(200, {"success": True, "banks": []})
+            return
+
+        directory: list[dict[str, Any]] = []
+        for bank_index in sorted(banks):
+            bank_data = banks.get(bank_index)
+            if not isinstance(bank_data, dict):
+                continue
+
+            stations_data = bank_data.get("stations", {})
+            stations: list[dict[str, Any]] = []
+            if isinstance(stations_data, dict):
+                for station_index in sorted(stations_data):
+                    station_data = stations_data.get(station_index)
+                    if not isinstance(station_data, dict):
+                        continue
+                    stations.append(
+                        {
+                            "station": int(station_index) + 1,
+                            "name": str(station_data.get("name", "") or ""),
+                        }
+                    )
+
+            directory.append(
+                {
+                    "bank": int(bank_index) + 1,
+                    "name": str(bank_data.get("name", "") or ""),
+                    "stations": stations,
+                }
+            )
+
+        self.send_json_response(200, {"success": True, "banks": directory})
 
     def _send_state(self):
         try:
