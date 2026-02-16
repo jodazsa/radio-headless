@@ -186,6 +186,7 @@ sudo journalctl -u radio-web-backend.service -f
 - `docs/AUTO-UPDATE.md`
 - `docs/MUSIC-TRANSFER.md`
 - `docs/WIFI-PROVISIONING-DESIGN.md`
+- `docs/REMOTE-RECOVERY-WIFI-LOSS.md`
 
 ---
 
@@ -334,6 +335,7 @@ git pull --ff-only origin main
 - Auto-updates: `docs/AUTO-UPDATE.md`
 - Local music transfer: `docs/MUSIC-TRANSFER.md`
 - Wi-Fi/hostname provisioning design: `docs/WIFI-PROVISIONING-DESIGN.md`
+- Wi-Fi outage + no physical access recovery guide: `docs/REMOTE-RECOVERY-WIFI-LOSS.md`
 
 If you are new to this project, read in this order:
 
