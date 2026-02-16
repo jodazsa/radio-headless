@@ -260,7 +260,7 @@ See complete setup and troubleshooting in `docs/WEB-CONTROL.md`.
 
 ## Setup AP Fallback
 
-When the Pi is offline for ~60 seconds at boot (no default route and connectivity check fails), `radio-setup-monitor.service` automatically enables setup mode:
+When the Pi is offline for ~60 seconds at boot (connectivity check fails), `radio-setup-monitor.service` automatically enables setup mode:
 
 - Creates `/var/lib/radio/setup-mode`
 - Brings up persistent NetworkManager AP connection `radio-setup-ap` on `wlan0`
@@ -275,6 +275,8 @@ When the Pi is offline for ~60 seconds at boot (no default route and connectivit
 2. attempt configured station Wi-Fi
 3. if online: remove `/var/lib/radio/setup-mode`
 4. if offline: re-enable setup AP and keep setup mode
+
+The monitor also exits setup mode automatically when connectivity is restored (it disables the AP and removes `/var/lib/radio/setup-mode`).
 
 ### Minimal test plan
 

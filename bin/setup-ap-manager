@@ -162,12 +162,13 @@ monitor() {
     now="$(date +%s)"
 
     if is_online; then
-      offline_since=0
-      sleep "$CHECK_INTERVAL_SECONDS"
-      continue
-    fi
-
-    if has_default_route; then
+      if is_ap_active || [[ -f "$SETUP_MARKER_FILE" ]]; then
+        if disable_ap; then
+          remove_marker
+          log "Connectivity restored; exited setup AP mode"
+          last_transition="$now"
+        fi
+      fi
       offline_since=0
       sleep "$CHECK_INTERVAL_SECONDS"
       continue
@@ -175,7 +176,7 @@ monitor() {
 
     if (( offline_since == 0 )); then
       offline_since="$now"
-      log "No default route and connectivity check failed; starting offline grace timer"
+      log "Connectivity check failed; starting offline grace timer"
       sleep "$CHECK_INTERVAL_SECONDS"
       continue
     fi
