@@ -1,0 +1,233 @@
+#!/bin/bash
+set -euo pipefail
+
+SETUP_MARKER_FILE="${RADIO_SETUP_MARKER_FILE:-/var/lib/radio/setup-mode}"
+SETUP_MARKER_DIR="$(dirname "$SETUP_MARKER_FILE")"
+SETUP_AP_CONNECTION="${RADIO_SETUP_AP_CONNECTION:-radio-setup-ap}"
+SETUP_AP_INTERFACE="${RADIO_SETUP_AP_INTERFACE:-wlan0}"
+SETUP_AP_PASSWORD="${RADIO_SETUP_AP_PASSWORD:-radio-setup-1234}"
+SETUP_AP_SUBNET="${RADIO_SETUP_AP_SUBNET:-192.168.4.1/24}"
+CHECK_URL="${RADIO_CONNECTIVITY_CHECK_URL:-https://connectivitycheck.gstatic.com/generate_204}"
+OFFLINE_GRACE_SECONDS="${RADIO_OFFLINE_GRACE_SECONDS:-60}"
+CHECK_INTERVAL_SECONDS="${RADIO_CHECK_INTERVAL_SECONDS:-10}"
+COOLDOWN_SECONDS="${RADIO_SETUP_AP_COOLDOWN_SECONDS:-45}"
+
+log() {
+  local message="$1"
+  echo "[radio-setup] ${message}"
+}
+
+ensure_nmcli() {
+  if ! command -v nmcli >/dev/null 2>&1; then
+    log "nmcli is not available"
+    return 1
+  fi
+}
+
+last4_mac_suffix() {
+  local mac
+  mac="$(cat "/sys/class/net/${SETUP_AP_INTERFACE}/address" 2>/dev/null || true)"
+  if [[ -z "$mac" ]]; then
+    echo "0000"
+    return
+  fi
+  mac="${mac//:/}"
+  echo "${mac: -4}" | tr '[:lower:]' '[:upper:]'
+}
+
+setup_ssid() {
+  echo "RADIO-SETUP-$(last4_mac_suffix)"
+}
+
+ensure_marker() {
+  mkdir -p "$SETUP_MARKER_DIR"
+  touch "$SETUP_MARKER_FILE"
+}
+
+remove_marker() {
+  rm -f "$SETUP_MARKER_FILE"
+}
+
+ensure_ap_connection_profile() {
+  local ssid
+  ssid="$(setup_ssid)"
+
+  if nmcli --terse --fields NAME connection show | grep -Fxq "$SETUP_AP_CONNECTION"; then
+    nmcli connection modify "$SETUP_AP_CONNECTION" \
+      connection.autoconnect yes \
+      connection.interface-name "$SETUP_AP_INTERFACE" \
+      802-11-wireless.mode ap \
+      802-11-wireless.ssid "$ssid" \
+      802-11-wireless-security.key-mgmt wpa-psk \
+      802-11-wireless-security.psk "$SETUP_AP_PASSWORD" \
+      ipv4.method shared \
+      ipv4.addresses "$SETUP_AP_SUBNET" \
+      ipv6.method ignore >/dev/null
+  else
+    nmcli connection add type wifi \
+      ifname "$SETUP_AP_INTERFACE" \
+      con-name "$SETUP_AP_CONNECTION" \
+      ssid "$ssid" >/dev/null
+
+    nmcli connection modify "$SETUP_AP_CONNECTION" \
+      connection.autoconnect yes \
+      802-11-wireless.mode ap \
+      802-11-wireless.band bg \
+      802-11-wireless-security.key-mgmt wpa-psk \
+      802-11-wireless-security.psk "$SETUP_AP_PASSWORD" \
+      ipv4.method shared \
+      ipv4.addresses "$SETUP_AP_SUBNET" \
+      ipv6.method ignore >/dev/null
+  fi
+}
+
+is_ap_active() {
+  nmcli --terse --fields NAME connection show --active | grep -Fxq "$SETUP_AP_CONNECTION"
+}
+
+enable_ap() {
+  ensure_nmcli || return 1
+  ensure_marker
+  ensure_ap_connection_profile
+
+  if is_ap_active; then
+    log "Setup AP already active (${SETUP_AP_CONNECTION})"
+    return 0
+  fi
+
+  if nmcli connection up "$SETUP_AP_CONNECTION" >/dev/null 2>&1; then
+    log "Enabled setup AP '${SETUP_AP_CONNECTION}' (SSID $(setup_ssid), gateway ${SETUP_AP_SUBNET})"
+    return 0
+  fi
+
+  log "Failed to enable setup AP '${SETUP_AP_CONNECTION}'"
+  return 1
+}
+
+disable_ap() {
+  ensure_nmcli || return 1
+  if is_ap_active; then
+    nmcli connection down "$SETUP_AP_CONNECTION" >/dev/null 2>&1 || true
+    log "Disabled setup AP '${SETUP_AP_CONNECTION}'"
+  fi
+}
+
+has_default_route() {
+  ip route show default 2>/dev/null | grep -q '^default '
+}
+
+connectivity_check() {
+  if command -v curl >/dev/null 2>&1; then
+    curl --silent --fail --max-time 5 "$CHECK_URL" >/dev/null
+    return $?
+  fi
+
+  ping -c1 -W2 1.1.1.1 >/dev/null 2>&1
+}
+
+is_online() {
+  has_default_route && connectivity_check
+}
+
+join_wifi_connection() {
+  local conn_name="$1"
+  nmcli connection up "$conn_name" >/dev/null 2>&1
+}
+
+wait_for_online() {
+  local timeout_seconds="${1:-60}"
+  local elapsed=0
+
+  while (( elapsed < timeout_seconds )); do
+    if is_online; then
+      return 0
+    fi
+    sleep 5
+    elapsed=$((elapsed + 5))
+  done
+
+  return 1
+}
+
+monitor() {
+  ensure_nmcli || exit 1
+
+  local offline_since=0
+  local last_transition=0
+
+  log "Starting setup AP monitor loop (grace=${OFFLINE_GRACE_SECONDS}s interval=${CHECK_INTERVAL_SECONDS}s cooldown=${COOLDOWN_SECONDS}s)"
+
+  while true; do
+    local now
+    now="$(date +%s)"
+
+    if is_online; then
+      offline_since=0
+      sleep "$CHECK_INTERVAL_SECONDS"
+      continue
+    fi
+
+    if has_default_route; then
+      offline_since=0
+      sleep "$CHECK_INTERVAL_SECONDS"
+      continue
+    fi
+
+    if (( offline_since == 0 )); then
+      offline_since="$now"
+      log "No default route and connectivity check failed; starting offline grace timer"
+      sleep "$CHECK_INTERVAL_SECONDS"
+      continue
+    fi
+
+    if (( now - offline_since < OFFLINE_GRACE_SECONDS )); then
+      sleep "$CHECK_INTERVAL_SECONDS"
+      continue
+    fi
+
+    if (( now - last_transition < COOLDOWN_SECONDS )); then
+      sleep "$CHECK_INTERVAL_SECONDS"
+      continue
+    fi
+
+    if enable_ap; then
+      last_transition="$now"
+    fi
+
+    sleep "$CHECK_INTERVAL_SECONDS"
+  done
+}
+
+case "${1:-}" in
+  enable)
+    enable_ap
+    ;;
+  disable)
+    disable_ap
+    ;;
+  is-online)
+    if is_online; then
+      echo "online"
+      exit 0
+    fi
+    echo "offline"
+    exit 1
+    ;;
+  join)
+    if [[ $# -lt 2 ]]; then
+      echo "usage: $0 join <connection-name>" >&2
+      exit 2
+    fi
+    join_wifi_connection "$2"
+    ;;
+  wait-online)
+    wait_for_online "${2:-60}"
+    ;;
+  monitor)
+    monitor
+    ;;
+  *)
+    echo "usage: $0 {enable|disable|is-online|join <conn>|wait-online [seconds]|monitor}" >&2
+    exit 2
+    ;;
+esac

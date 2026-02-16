@@ -41,6 +41,14 @@ copy_file_safe bin/radio-play /usr/local/bin/
 copy_file_safe bin/update-stations /usr/local/bin/
 sudo chmod +x /usr/local/bin/{rotary-controller,radio-play,update-stations}
 
+sudo mkdir -p /usr/local/lib/radio
+copy_file_safe bin/setup-ap-manager /usr/local/lib/radio/setup-ap-manager
+sudo chown root:root /usr/local/lib/radio/setup-ap-manager
+sudo chmod 750 /usr/local/lib/radio/setup-ap-manager
+copy_file_safe bin/apply-network-config /usr/local/lib/radio/apply-network-config
+sudo chown root:root /usr/local/lib/radio/apply-network-config
+sudo chmod 750 /usr/local/lib/radio/apply-network-config
+
 # 3. Update configs
 echo "→ Updating configs..."
 copy_file_safe config/hardware-rotary.yaml /home/radio/
@@ -67,6 +75,7 @@ copy_file_safe systemd/rotary-controller.service /etc/systemd/system/
 copy_file_safe systemd/radio-update-stations.service /etc/systemd/system/
 copy_file_safe systemd/radio-update-stations.timer /etc/systemd/system/
 copy_file_safe systemd/radio-web-backend.service /etc/systemd/system/
+copy_file_safe systemd/radio-setup-monitor.service /etc/systemd/system/
 
 # Install backend override env file if missing (QoL for custom port/paths)
 if [ ! -f /etc/default/radio-web-backend ]; then
@@ -86,12 +95,14 @@ sudo systemctl daemon-reload
 # Enable timer/backend if not already enabled
 sudo systemctl enable --now radio-update-stations.timer 2>/dev/null || true
 sudo systemctl enable --now radio-web-backend.service 2>/dev/null || true
+sudo systemctl enable --now radio-setup-monitor.service 2>/dev/null || true
 
 # 7. Restart services
 echo "→ Restarting services..."
 sudo systemctl restart rotary-controller.service
 sudo systemctl restart mpd.service
 sudo systemctl restart radio-web-backend.service
+sudo systemctl restart radio-setup-monitor.service
 
 echo ""
 echo "✓ Deployment complete!"
@@ -101,6 +112,7 @@ echo "---------------"
 sudo systemctl is-active rotary-controller.service && echo "✓ rotary-controller: running" || echo "✗ rotary-controller: failed"
 sudo systemctl is-active mpd.service && echo "✓ mpd: running" || echo "✗ mpd: failed"
 sudo systemctl is-active radio-web-backend.service && echo "✓ web backend: running" || echo "✗ web backend: failed"
+sudo systemctl is-active radio-setup-monitor.service && echo "✓ setup monitor: running" || echo "✗ setup monitor: failed"
 systemctl is-active radio-update-stations.timer && echo "✓ update-stations timer: active" || echo "✗ update-stations timer: inactive"
 echo ""
 echo "For detailed logs:"
