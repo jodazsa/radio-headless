@@ -15,10 +15,7 @@ from pathlib import Path
 import re
 import shlex
 import subprocess
-import tempfile
 from typing import Any
-from urllib.error import HTTPError, URLError
-from urllib.request import urlopen
 
 import yaml
 
@@ -32,11 +29,6 @@ SETUP_PAGE = os.getenv("WEB_SETUP_PAGE", "setup.html")
 SETUP_MARKER_FILE = Path(os.getenv("RADIO_SETUP_MARKER_FILE", "/var/lib/radio/setup-mode"))
 SETUP_APPLY_CMD = os.getenv("RADIO_SETUP_APPLY_CMD", "/usr/bin/sudo /usr/local/lib/radio/apply-network-config")
 STATIONS_FILE = Path(os.getenv("RADIO_STATIONS_FILE", "/home/radio/stations.yaml"))
-STATIONS_SOURCE_URL_TEMPLATE = os.getenv(
-    "RADIO_STATIONS_SOURCE_TEMPLATE",
-    "https://raw.githubusercontent.com/jodazsa/radio/refs/heads/main/config/stations{index}.yaml",
-)
-STATIONS_SOURCE_COUNT = 10
 
 ALLOWED_COMMANDS = [
     r"^mpc\s+(play|pause|stop|next|prev|volume\s+\d{1,3})$",
@@ -86,40 +78,6 @@ def command_to_argv(command: str) -> list[str]:
 
 def is_setup_mode() -> bool:
     return SETUP_MARKER_FILE.exists()
-
-
-def get_station_source_url(index: int) -> str:
-    return STATIONS_SOURCE_URL_TEMPLATE.format(index=index)
-
-
-def station_source_options() -> list[dict[str, Any]]:
-    return [
-        {
-            "index": index,
-            "name": f"stations{index}.yaml",
-            "url": get_station_source_url(index),
-        }
-        for index in range(STATIONS_SOURCE_COUNT)
-    ]
-
-
-def validate_stations_content(content: bytes) -> None:
-    parsed = yaml.safe_load(content.decode("utf-8"))
-    if not isinstance(parsed, dict):
-        raise ValueError("Stations file must be a YAML object")
-    banks = parsed.get("banks")
-    if not isinstance(banks, dict) or not banks:
-        raise ValueError("Stations file must contain at least one bank")
-
-
-def install_stations_content(content: bytes) -> None:
-    STATIONS_FILE.parent.mkdir(parents=True, exist_ok=True)
-    with tempfile.NamedTemporaryFile(mode="wb", delete=False, dir=str(STATIONS_FILE.parent), suffix=".yaml") as tmp_file:
-        tmp_file.write(content)
-        tmp_path = Path(tmp_file.name)
-
-    tmp_path.chmod(0o644)
-    tmp_path.replace(STATIONS_FILE)
 
 
 def normalize_hostname(hostname: str) -> str:
@@ -195,10 +153,6 @@ class CommandHandler(BaseHTTPRequestHandler):
             )
             return
 
-        if self.path == "/stations/options":
-            self.send_json_response(200, {"success": True, "options": station_source_options()})
-            return
-
         if self.path.startswith("/") and self.path.count("/") == 1 and not self.path.endswith("/"):
             self._send_static_file(self.path[1:])
             return
@@ -265,13 +219,6 @@ class CommandHandler(BaseHTTPRequestHandler):
             if data is None:
                 return
             self._apply_setup(data)
-            return
-
-        if self.path == "/stations/select":
-            data = self._read_json_body(optional=False)
-            if data is None:
-                return
-            self._select_station_source(data)
             return
 
         self.send_error(404)
@@ -388,70 +335,6 @@ class CommandHandler(BaseHTTPRequestHandler):
             self.send_json_response(
                 500,
                 {"success": False, "error": f"Command not found: {exc}", "error_type": "command_not_found"},
-            )
-
-    def _select_station_source(self, data: dict[str, Any]):
-        try:
-            index = int(data.get("index"))
-        except (TypeError, ValueError):
-            self.send_json_response(
-                400,
-                {"success": False, "error": "index must be an integer", "error_type": "invalid_request"},
-            )
-            return
-
-        if index < 0 or index >= STATIONS_SOURCE_COUNT:
-            self.send_json_response(
-                400,
-                {
-                    "success": False,
-                    "error": f"index must be between 0 and {STATIONS_SOURCE_COUNT - 1}",
-                    "error_type": "invalid_request",
-                },
-            )
-            return
-
-        url = get_station_source_url(index)
-        try:
-            with urlopen(url, timeout=30) as response:
-                content = response.read()
-            validate_stations_content(content)
-            install_stations_content(content)
-            self.send_json_response(
-                200,
-                {
-                    "success": True,
-                    "index": index,
-                    "name": f"stations{index}.yaml",
-                    "url": url,
-                },
-            )
-        except HTTPError as exc:
-            self.send_json_response(
-                502,
-                {
-                    "success": False,
-                    "error": f"Download failed with HTTP {exc.code}",
-                    "error_type": "download_failed",
-                },
-            )
-        except URLError as exc:
-            self.send_json_response(
-                502,
-                {
-                    "success": False,
-                    "error": f"Network error downloading stations: {exc.reason}",
-                    "error_type": "download_failed",
-                },
-            )
-        except (OSError, ValueError, yaml.YAMLError) as exc:
-            self.send_json_response(
-                400,
-                {
-                    "success": False,
-                    "error": str(exc),
-                    "error_type": "invalid_stations_file",
-                },
             )
 
     def _send_status(self):
