@@ -101,7 +101,7 @@ banks:
         type: stream
         url: "https://stream0.wfmu.org/freeform-128k.mp3"
       1:
-        name: "WPKN Bridgeport, Connecticut 89.5"
+        name: "WPKN Bridgeport, CT 89.5"
         type: stream
         url: "https://ice25.securenetsystems.net/WPKN"
       2:
