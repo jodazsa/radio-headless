@@ -13,7 +13,7 @@ banks:
         type: stream
         url: "http://wwoz-sc.streamguys.com/wwoz-hi.mp3"
       1:
-        name: "WBGO"
+        name: "WBGO Jazz 88 Newark"
         type: stream
         url: "https://ais-sa8.cdnstream1.com/3629_64.aac"
       2:
