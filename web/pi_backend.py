@@ -30,6 +30,7 @@ SETUP_MARKER_FILE = Path(os.getenv("RADIO_SETUP_MARKER_FILE", "/var/lib/radio/se
 SETUP_APPLY_CMD = os.getenv("RADIO_SETUP_APPLY_CMD", "/usr/bin/sudo /usr/local/lib/radio/apply-network-config")
 STATIONS_FILE = Path(os.getenv("RADIO_STATIONS_FILE", "/home/radio/stations.yaml"))
 HARDWARE_CONFIG_FILE = Path(os.getenv("RADIO_HARDWARE_CONFIG_FILE", "/home/radio/hardware-rotary.yaml"))
+UPDATE_STATIONS_CMD = os.getenv("RADIO_UPDATE_STATIONS_CMD", "/usr/local/bin/update-stations")
 
 ALLOWED_COMMANDS = [
     r"^mpc\s+(play|pause|stop|next|prev|volume\s+\d{1,3})$",
@@ -413,6 +414,7 @@ class CommandHandler(BaseHTTPRequestHandler):
             {
                 "success": True,
                 "github_url": str(auto_update.get("github_url", "") or ""),
+                "auto_update_enabled": bool(auto_update.get("enabled", True)),
             },
         )
 
@@ -489,7 +491,55 @@ class CommandHandler(BaseHTTPRequestHandler):
             )
             return
 
-        self.send_json_response(200, {"success": True, "github_url": github_url})
+        # Config saved — now fetch, validate, and install the stations.
+        try:
+            result = self._run_local(
+                ["/usr/bin/python3", UPDATE_STATIONS_CMD, "--url", github_url, "--json"],
+                timeout=45,
+            )
+
+            update_result: dict[str, Any] = {}
+            stdout = result.stdout.strip()
+            if stdout:
+                # The JSON line may follow log output; take the last line.
+                last_line = stdout.rsplit("\n", 1)[-1]
+                try:
+                    update_result = json.loads(last_line)
+                except json.JSONDecodeError:
+                    pass
+
+            if result.returncode == 0:
+                self.send_json_response(
+                    200,
+                    {
+                        "success": True,
+                        "github_url": github_url,
+                        "stations_updated": update_result.get("changed", False),
+                        "message": update_result.get("message", "Source saved and stations updated"),
+                    },
+                )
+            else:
+                self.send_json_response(
+                    200,
+                    {
+                        "success": True,
+                        "github_url": github_url,
+                        "stations_updated": False,
+                        "fetch_error": update_result.get("error", result.stderr.strip() or "Failed to fetch stations"),
+                        "message": "Source URL saved, but could not fetch stations from this URL",
+                    },
+                )
+        except subprocess.TimeoutExpired:
+            self.send_json_response(
+                200,
+                {
+                    "success": True,
+                    "github_url": github_url,
+                    "stations_updated": False,
+                    "fetch_error": "Timed out downloading stations",
+                    "message": "Source URL saved, but fetch timed out",
+                },
+            )
 
     def _send_stations_directory(self):
         try:

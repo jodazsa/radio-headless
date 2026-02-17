@@ -527,6 +527,8 @@
             font-size: 12px;
             font-family: 'Courier New', monospace;
         }
+        .source-message.success { color: #4CAF50; }
+        .source-message.error { color: #ff5c5c; }
 
         @media (max-width: 700px) {
             .directory-grid {
@@ -804,7 +806,11 @@
                     }
 
                     input.value = data.github_url || '';
-                    message.textContent = 'Current source loaded';
+                    if (data.auto_update_enabled === false) {
+                        message.textContent = 'Auto-update is disabled \u2014 stations won\'t refresh automatically at 4 AM';
+                    } else {
+                        message.textContent = 'Current source loaded';
+                    }
                 })
                 .catch(err => {
                     message.textContent = `Unable to load current source: ${err.message}`;
@@ -819,11 +825,13 @@
 
             if (!githubUrl) {
                 message.textContent = 'Please enter a source URL';
+                message.className = 'source-message error';
                 return;
             }
 
             submitButton.disabled = true;
-            message.textContent = 'Saving source...';
+            message.textContent = 'Saving URL and fetching stations...';
+            message.className = 'source-message';
 
             fetch(`${BACKEND_URL}/stations/source`, {
                 method: 'POST',
@@ -837,10 +845,22 @@
                     }
 
                     input.value = data.github_url || githubUrl;
-                    message.textContent = 'Stations source updated';
+
+                    if (data.stations_updated) {
+                        message.textContent = data.message || 'Stations updated successfully';
+                        message.className = 'source-message success';
+                        fetchStationDirectory();
+                    } else if (data.fetch_error) {
+                        message.textContent = (data.message || 'URL saved but fetch failed') + ': ' + data.fetch_error;
+                        message.className = 'source-message error';
+                    } else {
+                        message.textContent = data.message || 'Source saved, stations already up to date';
+                        message.className = 'source-message';
+                    }
                 })
                 .catch(err => {
                     message.textContent = `Unable to save source: ${err.message}`;
+                    message.className = 'source-message error';
                 })
                 .finally(() => {
                     submitButton.disabled = false;
