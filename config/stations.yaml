@@ -421,7 +421,7 @@ banks:
         type: mp3_dir_random_start_then_in_order
         dir: "shows/JohnPeel"    
       5:
-        name: "Marian McPartlan"
+        name: "Marian McPartland"
         type: mp3_dir_random_start_then_in_order
         dir: "shows/MarianMcPartland"    
       6:
