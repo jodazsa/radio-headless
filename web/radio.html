@@ -737,7 +737,7 @@
         
         <div class="tuner-section">
             <div class="tuner-group">
-                <div class="tuner-label">Bank</div>
+                <div class="tuner-label">Banks</div>
                 <div class="keypad">
                     <button class="keypad-button" onclick="setBank(1)">1</button>
                     <button class="keypad-button" onclick="setBank(2)">2</button>
@@ -753,7 +753,7 @@
             </div>
             
             <div class="tuner-group">
-                <div class="tuner-label">Station</div>
+                <div class="tuner-label">Stations</div>
                 <div class="keypad">
                     <button class="keypad-button" onclick="setStation(1)">1</button>
                     <button class="keypad-button" onclick="setStation(2)">2</button>
@@ -800,6 +800,7 @@
 
         <div class="controls-row">
             <button class="control-button danger btn-sm" id="shutdownBtn" onclick="requestShutdown()" title="Power down">Power down</button>
+            <button class="control-button btn-sm" id="refreshPageBtn" onclick="refreshPageNow()" title="Refresh this page">Refresh this page</button>
         </div>
 
         <!-- Admin toggle -->
@@ -830,10 +831,10 @@
                     <span class="admin-desc">Restart the radio web backend</span>
                 </div>
 
-                <!-- Reboot Pi -->
+                <!-- Reboot Radio -->
                 <div class="admin-row">
-                    <button class="admin-action-btn danger" id="rebootBtn" onclick="requestReboot()">Reboot Pi</button>
-                    <span class="admin-desc">Full Raspberry Pi reboot (~1 min)</span>
+                    <button class="admin-action-btn danger" id="rebootBtn" onclick="requestReboot()">Reboot Radio</button>
+                    <span class="admin-desc">Full radio reboot (~1 min)</span>
                 </div>
 
                 <hr class="admin-divider">
@@ -854,6 +855,12 @@
                     <button class="source-submit" id="stationsSourceSubmit" onclick="submitStationsSource()">Submit</button>
                 </div>
                 <div class="source-message" id="stationsSourceMessage">Loading current source...</div>
+
+                <div class="admin-row">
+                    <button class="admin-action-btn" id="toggleAutoUpdateBtn" onclick="toggleStationsAutoUpdate()">Disable Auto-Update</button>
+                    <span class="admin-desc" id="autoUpdateStatusText">Stations auto-update at 4 AM</span>
+                </div>
+
 
                 <div class="admin-message" id="adminMessage"></div>
             </div>
@@ -984,7 +991,9 @@
                     }
 
                     input.value = data.github_url || '';
-                    if (data.auto_update_enabled === false) {
+                    stationsAutoUpdateEnabled = data.auto_update_enabled !== false;
+                    updateAutoUpdateControls();
+                    if (!stationsAutoUpdateEnabled) {
                         message.textContent = 'Auto-update is disabled \u2014 stations won\'t refresh automatically at 4 AM';
                     } else {
                         message.textContent = 'Current source loaded';
@@ -993,6 +1002,52 @@
                 .catch(err => {
                     message.textContent = `Unable to load current source: ${err.message}`;
                 });
+        }
+
+        function updateAutoUpdateControls() {
+            const toggleBtn = document.getElementById('toggleAutoUpdateBtn');
+            const statusText = document.getElementById('autoUpdateStatusText');
+            if (!toggleBtn || !statusText) return;
+
+            toggleBtn.textContent = stationsAutoUpdateEnabled ? 'Disable Auto-Update' : 'Enable Auto-Update';
+            statusText.textContent = stationsAutoUpdateEnabled
+                ? 'Stations auto-update at 4 AM'
+                : 'Stations auto-update is OFF';
+        }
+
+        function toggleStationsAutoUpdate() {
+            const toggleBtn = document.getElementById('toggleAutoUpdateBtn');
+            const nextValue = !stationsAutoUpdateEnabled;
+
+            toggleBtn.disabled = true;
+
+            fetch(`${BACKEND_URL}/stations/auto-update`, {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ enabled: nextValue }),
+            })
+            .then(r => r.json())
+            .then(data => {
+                if (!data.success) {
+                    throw new Error(data.error || 'Could not update auto-update setting');
+                }
+
+                stationsAutoUpdateEnabled = data.auto_update_enabled !== false;
+                updateAutoUpdateControls();
+
+                const message = document.getElementById('stationsSourceMessage');
+                if (!stationsAutoUpdateEnabled) {
+                    message.textContent = 'Auto-update is disabled — stations won\'t refresh automatically at 4 AM';
+                } else {
+                    message.textContent = 'Auto-update enabled — stations will refresh automatically at 4 AM';
+                }
+            })
+            .catch(err => {
+                showAdminMessage('Could not update auto-update setting: ' + err.message, false);
+            })
+            .finally(() => {
+                toggleBtn.disabled = false;
+            });
         }
 
         function submitStationsSource() {
@@ -1464,6 +1519,8 @@
         // ── Admin panel ──────────────────────────────────────────────────────
 
         let adminLogInterval = null;
+        let adminReloadTimeout = null;
+        let stationsAutoUpdateEnabled = true;
 
         function toggleAdminPanel() {
             const panel = document.getElementById('adminPanel');
@@ -1543,7 +1600,8 @@
                         adminLogInterval = null;
                         document.getElementById('updateBtn').disabled = false;
                         fetchAdminVersion();
-                        showAdminMessage('Update complete! Reload the page to load the latest UI.', true);
+                        showAdminMessage('Update complete! Reloading page in 30 seconds...', true);
+                        scheduleUpdateRefresh();
                     } else if (data.failed) {
                         clearInterval(adminLogInterval);
                         adminLogInterval = null;
@@ -1565,6 +1623,16 @@
                     // Server still down; keep polling — the next successful fetch will continue
                 });
             }, 2000);
+        }
+
+        function scheduleUpdateRefresh() {
+            if (adminReloadTimeout) {
+                clearTimeout(adminReloadTimeout);
+            }
+
+            adminReloadTimeout = setTimeout(() => {
+                window.location.reload();
+            }, 30000);
         }
 
         // ── Restart service ──────────────────────────────────────────────────
@@ -1602,11 +1670,11 @@
             });
         }
 
-        // ── Reboot Pi ────────────────────────────────────────────────────────
+        // ── Reboot Radio ─────────────────────────────────────────────────────
 
         function requestReboot() {
             if (!confirm(
-                'Reboot the Raspberry Pi now?\n\n' +
+                'Reboot the radio now?\n\n' +
                 'The radio will be unavailable for about a minute.'
             )) return;
 
@@ -1623,10 +1691,10 @@
             .then(r => r.json())
             .then(data => {
                 if (data.success) {
-                    showAdminMessage('Pi is rebooting — will reconnect when it comes back online.', false);
+                    showAdminMessage('Radio is rebooting — will reconnect when it comes back online.', false);
                     waitForServerReturn(() => {
                         btn.disabled = false;
-                        showAdminMessage('Pi is back online!', true);
+                        showAdminMessage('Radio is back online!', true);
                         updateConnectionIndicator(true, 'CONNECTED');
                     });
                 } else {
@@ -1636,10 +1704,10 @@
             })
             .catch(() => {
                 // Already rebooting
-                showAdminMessage('Pi is rebooting — will reconnect when it comes back online.', false);
+                showAdminMessage('Radio is rebooting — will reconnect when it comes back online.', false);
                 waitForServerReturn(() => {
                     btn.disabled = false;
-                    showAdminMessage('Pi is back online!', true);
+                    showAdminMessage('Radio is back online!', true);
                     updateConnectionIndicator(true, 'CONNECTED');
                 });
             });
@@ -1672,6 +1740,10 @@
         }
 
         // ── Helpers ──────────────────────────────────────────────────────────
+
+        function refreshPageNow() {
+            window.location.reload();
+        }
 
         function waitForServerReturn(callback) {
             const checkInterval = setInterval(() => {
