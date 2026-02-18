@@ -887,6 +887,7 @@
         let tunerDebounceTimer = null;
         let stationScrollFrame = null;
         let stationScrollRunId = 0;
+        let currentDisplayText = null;
         
         // Config is not needed for the '(1)' backend
         function fetchConfig() { /* no-op */ }
@@ -1303,6 +1304,11 @@
         }
         
         function updateStationDisplay(text) {
+            // Skip if the text hasn't changed — avoids restarting the scroll animation
+            if (text === currentDisplayText) {
+                return;
+            }
+
             const displayElement = document.getElementById('stationDisplay');
 
             stationScrollRunId += 1;
@@ -1312,8 +1318,9 @@
                 cancelAnimationFrame(stationScrollFrame);
                 stationScrollFrame = null;
             }
+            currentDisplayText = text;
 
-            
+
             // Check if text is longer than ~20 characters (needs scrolling)
             if (text.length > 20) {
                 displayElement.innerHTML = `<span>${text}</span>`;
