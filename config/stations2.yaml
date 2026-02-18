@@ -37,7 +37,7 @@ banks:
         type: stream
         url: "https://rr5100.globalhost1.com/8240/stream"
       7:
-        name: "Sendas FM 107.3 Matagalpa
+        name: "Sendas FM 107.3 Matagalpa"
         type: stream
         url: "https://s17.ssl-stream.com/proxy/radiosendasfm?mp=/stream"
       8:
