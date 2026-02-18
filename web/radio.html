@@ -798,11 +798,6 @@
             <div class="directory-grid" id="stationDirectory"></div>
         </div>
 
-        <div class="controls-row">
-            <button class="control-button danger btn-sm" id="shutdownBtn" onclick="requestShutdown()" title="Power down">Power down</button>
-            <button class="control-button btn-sm" id="refreshPageBtn" onclick="refreshPageNow()" title="Refresh this page">Refresh this page</button>
-        </div>
-
         <!-- Admin toggle -->
         <div class="controls-row admin-toggle-row">
             <button class="control-button btn-sm" id="adminToggleBtn" onclick="toggleAdminPanel()">Admin</button>
@@ -835,6 +830,16 @@
                 <div class="admin-row">
                     <button class="admin-action-btn danger" id="rebootBtn" onclick="requestReboot()">Reboot Radio</button>
                     <span class="admin-desc">Full radio reboot (~1 min)</span>
+                </div>
+
+                <div class="admin-row">
+                    <button class="admin-action-btn danger" id="shutdownBtn" onclick="requestShutdown()">Power down</button>
+                    <span class="admin-desc">Shut down safely (requires unplug/replug to power back on)</span>
+                </div>
+
+                <div class="admin-row">
+                    <button class="admin-action-btn" id="refreshPageBtn" onclick="refreshPageNow()">Refresh page</button>
+                    <span class="admin-desc">Reload this web interface</span>
                 </div>
 
                 <hr class="admin-divider">
