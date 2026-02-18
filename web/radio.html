@@ -6,7 +6,7 @@
     <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📻</text></svg>">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Barlow+Semi+Condensed:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Roboto+Condensed:wght@400;500;600;700&display=swap" rel="stylesheet">
     <title>Radio Controller</title>
     <style>
         * {
@@ -16,7 +16,7 @@
         }
         
         body {
-            font-family: 'Barlow Semi Condensed', Arial, sans-serif;
+            font-family: 'Roboto Condensed', Arial, sans-serif;
             background: #2a2a2a;
             min-height: 100vh;
             display: flex;
@@ -51,24 +51,6 @@
             position: relative;
             overflow: hidden;
             animation: display-glow 4s ease-in-out infinite;
-        }
-
-        .display-area::after {
-            content: '';
-            position: absolute;
-            top: 0;
-            left: 0;
-            right: 0;
-            bottom: 0;
-            background: repeating-linear-gradient(
-                0deg,
-                transparent,
-                transparent 2px,
-                rgba(0,0,0,0.04) 2px,
-                rgba(0,0,0,0.04) 4px
-            );
-            pointer-events: none;
-            z-index: 1;
         }
 
         @keyframes display-glow {
@@ -185,45 +167,24 @@
         }
         
         .control-button {
-            background:
-                radial-gradient(circle at 1px 1px, rgba(255,255,255,0.03) 1px, transparent 0),
-                linear-gradient(180deg, #353535 0%, #2a2a2a 3%, #1a1a1a 100%);
-            background-size: 3px 3px, 100% 100%;
-            border: 2px solid #444;
-            border-top-color: #555;
-            border-bottom-color: #333;
+            background: #252525;
+            border: 1px solid #444;
             color: #999;
             padding: 15px;
             border-radius: 6px;
             font-size: 24px;
             cursor: pointer;
-            transition: all 0.1s;
+            transition: all 0.15s;
             flex: 1;
-            box-shadow:
-                0 3px 0 #000,
-                0 4px 2px rgba(0,0,0,0.3),
-                inset 0 1px 0 rgba(255,255,255,0.18),
-                inset 0 -1px 0 rgba(0,0,0,0.2);
             font-weight: bold;
         }
 
         .control-button:hover:not(:disabled) {
-            background:
-                radial-gradient(circle at 1px 1px, rgba(255,255,255,0.03) 1px, transparent 0),
-                linear-gradient(180deg, #3d3d3d 0%, #2e2e2e 3%, #222 100%);
-            background-size: 3px 3px, 100% 100%;
-            transform: translateY(1px);
-            box-shadow:
-                0 2px 0 #000,
-                0 3px 2px rgba(0,0,0,0.3),
-                inset 0 1px 0 rgba(255,255,255,0.15);
+            background: #303030;
         }
 
         .control-button:active:not(:disabled) {
-            transform: translateY(3px);
-            box-shadow:
-                0 0 0 #000,
-                inset 0 2px 4px rgba(0,0,0,0.5);
+            background: #1a1a1a;
         }
         
         .control-button:disabled {
@@ -234,14 +195,7 @@
         .control-button.active-state {
             border-color: #c88a00;
             color: #ff8c00;
-            background:
-                radial-gradient(circle at 1px 1px, rgba(255,255,255,0.03) 1px, transparent 0),
-                linear-gradient(180deg, #4a4a4a 0%, #2d2d2d 100%);
-            background-size: 3px 3px, 100% 100%;
-            box-shadow:
-                0 2px 0 #000,
-                0 0 10px rgba(255, 140, 0, 0.3),
-                inset 0 1px 0 rgba(255,255,255,0.15);
+            background: #2d2d2d;
         }
 
         .control-button.danger {
@@ -250,7 +204,7 @@
         }
 
         .control-button.danger:hover:not(:disabled) {
-            background: linear-gradient(180deg, #4a2a2a 0%, #2a1a1a 100%);
+            background: #3a2020;
         }
         
         .tuner-section {
@@ -304,44 +258,23 @@
         }
         
         .keypad-button {
-            background:
-                radial-gradient(circle at 1px 1px, rgba(255,255,255,0.03) 1px, transparent 0),
-                linear-gradient(180deg, #353535 0%, #2a2a2a 3%, #1a1a1a 100%);
-            background-size: 3px 3px, 100% 100%;
-            border: 2px solid #444;
-            border-top-color: #555;
-            border-bottom-color: #333;
+            background: #252525;
+            border: 1px solid #444;
             color: #666;
             padding: 10px;
             border-radius: 6px;
             font-size: 16px;
             cursor: pointer;
-            transition: all 0.1s;
-            box-shadow:
-                0 3px 0 #000,
-                0 4px 2px rgba(0,0,0,0.3),
-                inset 0 1px 0 rgba(255,255,255,0.18),
-                inset 0 -1px 0 rgba(0,0,0,0.2);
+            transition: all 0.15s;
             font-weight: bold;
         }
 
         .keypad-button:hover:not(:disabled) {
-            background:
-                radial-gradient(circle at 1px 1px, rgba(255,255,255,0.03) 1px, transparent 0),
-                linear-gradient(180deg, #3d3d3d 0%, #2e2e2e 3%, #222 100%);
-            background-size: 3px 3px, 100% 100%;
-            transform: translateY(1px);
-            box-shadow:
-                0 2px 0 #000,
-                0 3px 2px rgba(0,0,0,0.3),
-                inset 0 1px 0 rgba(255,255,255,0.15);
+            background: #303030;
         }
 
         .keypad-button:active:not(:disabled) {
-            transform: translateY(3px);
-            box-shadow:
-                0 0 0 #000,
-                inset 0 2px 4px rgba(0,0,0,0.5);
+            background: #1a1a1a;
         }
 
         .keypad-button:disabled {
@@ -352,10 +285,7 @@
         .keypad-button.active {
             border-color: #c88a00;
             color: #d4960a;
-            background:
-                radial-gradient(circle at 1px 1px, rgba(255,255,255,0.03) 1px, transparent 0),
-                linear-gradient(180deg, #3a3a3a 0%, #2a2a2a 100%);
-            background-size: 3px 3px, 100% 100%;
+            background: #2d2d2d;
         }
         
         .keypad-button:nth-child(10) {
@@ -363,35 +293,25 @@
         }
         
         .play-button {
-            background: linear-gradient(180deg, #ff8c00 0%, #d97500 100%);
-            border: 2px solid #333;
+            background: #ff8c00;
+            border: 1px solid #333;
             color: #000;
             padding: 20px 40px;
             border-radius: 8px;
             font-size: 16px;
             font-weight: bold;
             cursor: pointer;
-            transition: all 0.1s;
-            box-shadow: 
-                0 4px 0 #8b4500,
-                inset 0 1px 0 rgba(255,255,255,0.3);
+            transition: all 0.15s;
             text-transform: uppercase;
             letter-spacing: 2px;
         }
-        
+
         .play-button:hover:not(:disabled) {
-            background: linear-gradient(180deg, #ffa520 0%, #e08000 100%);
-            transform: translateY(1px);
-            box-shadow: 
-                0 3px 0 #8b4500,
-                inset 0 1px 0 rgba(255,255,255,0.3);
+            background: #ffa520;
         }
-        
+
         .play-button:active:not(:disabled) {
-            transform: translateY(4px);
-            box-shadow: 
-                0 0 0 #8b4500,
-                inset 0 2px 6px rgba(0,0,0,0.4);
+            background: #d97500;
         }
         
         .play-button:disabled {
@@ -420,45 +340,24 @@
         }
         
         .favorite-button {
-            background:
-                radial-gradient(circle at 1px 1px, rgba(255,255,255,0.03) 1px, transparent 0),
-                linear-gradient(180deg, #353535 0%, #2a2a2a 3%, #1a1a1a 100%);
-            background-size: 3px 3px, 100% 100%;
-            border: 2px solid #383838;
-            border-top-color: #444;
-            border-bottom-color: #2a2a2a;
+            background: #252525;
+            border: 1px solid #383838;
             color: #555;
             padding: 12px 8px;
             border-radius: 6px;
             font-size: 14px;
             font-weight: bold;
             cursor: pointer;
-            transition: all 0.1s;
-            box-shadow:
-                0 3px 0 #000,
-                0 4px 2px rgba(0,0,0,0.3),
-                inset 0 1px 0 rgba(255,255,255,0.18),
-                inset 0 -1px 0 rgba(0,0,0,0.2);
+            transition: all 0.15s;
             position: relative;
         }
 
         .favorite-button:hover:not(:disabled) {
-            background:
-                radial-gradient(circle at 1px 1px, rgba(255,255,255,0.03) 1px, transparent 0),
-                linear-gradient(180deg, #3d3d3d 0%, #2e2e2e 3%, #222 100%);
-            background-size: 3px 3px, 100% 100%;
-            transform: translateY(1px);
-            box-shadow:
-                0 2px 0 #000,
-                0 3px 2px rgba(0,0,0,0.3),
-                inset 0 1px 0 rgba(255,255,255,0.15);
+            background: #303030;
         }
 
         .favorite-button:active:not(:disabled) {
-            transform: translateY(3px);
-            box-shadow:
-                0 0 0 #000,
-                inset 0 2px 4px rgba(0,0,0,0.5);
+            background: #1a1a1a;
         }
 
         .favorite-button:disabled {
@@ -467,7 +366,7 @@
         }
 
         .favorite-button.saving {
-            background: linear-gradient(180deg, #ff8c00 0%, #d97500 100%);
+            background: #ff8c00;
             color: #000;
             animation: pulse 0.5s ease-in-out;
         }
@@ -510,8 +409,8 @@
         }
 
         .refresh-list-button {
-            background: linear-gradient(180deg, #2a2a2a 0%, #1a1a1a 100%);
-            border: 2px solid #444;
+            background: #222;
+            border: 1px solid #444;
             color: #999;
             padding: 8px 12px;
             border-radius: 6px;
@@ -541,7 +440,7 @@
 
         .bank-station-list {
             color: #ddd;
-            font-family: 'Courier New', monospace;
+            font-family: 'Roboto Condensed', Arial, sans-serif;
             font-size: 13px;
             line-height: 1.4;
             list-style: none;
@@ -554,7 +453,7 @@
         .directory-message {
             color: #bbb;
             font-size: 12px;
-            font-family: 'Courier New', monospace;
+            font-family: 'Roboto Condensed', Arial, sans-serif;
         }
 
         .source-section {
@@ -594,8 +493,8 @@
         }
 
         .source-submit {
-            background: linear-gradient(180deg, #2a2a2a 0%, #1a1a1a 100%);
-            border: 2px solid #444;
+            background: #222;
+            border: 1px solid #444;
             color: #999;
             padding: 10px 14px;
             border-radius: 6px;
@@ -667,8 +566,8 @@
         }
 
         .admin-action-btn {
-            background: linear-gradient(180deg, #2a2a2a 0%, #1a1a1a 100%);
-            border: 2px solid #444;
+            background: #222;
+            border: 1px solid #444;
             color: #999;
             padding: 10px 16px;
             border-radius: 6px;
@@ -678,11 +577,10 @@
             letter-spacing: 1px;
             white-space: nowrap;
             min-width: 150px;
-            box-shadow: 0 2px 0 #000;
         }
 
         .admin-action-btn:hover:not(:disabled) {
-            background: linear-gradient(180deg, #3a3a3a 0%, #2a2a2a 100%);
+            background: #303030;
         }
 
         .admin-action-btn:disabled {
@@ -696,7 +594,7 @@
         }
 
         .admin-action-btn.danger:hover:not(:disabled) {
-            background: linear-gradient(180deg, #4a2a2a 0%, #2a1a1a 100%);
+            background: #3a2020;
         }
 
         .admin-desc {
