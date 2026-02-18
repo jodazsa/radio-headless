@@ -690,7 +690,7 @@
         <div class="directory-section">
             <div class="directory-header">
                 <div class="directory-label">Station Directory</div>
-                <button class="refresh-list-button" id="refreshDirectoryBtn" onclick="fetchStationDirectory()">Refresh List</button>
+                <button class="refresh-list-button" id="refreshDirectoryBtn" onclick="refreshStationDirectory()">Refresh List</button>
             </div>
             <div class="directory-message" id="directoryMessage">Loading station directory...</div>
             <div class="directory-grid" id="stationDirectory"></div>
@@ -734,11 +734,7 @@
         function fetchConfig() { /* no-op */ }
 
         function fetchStationDirectory() {
-            const refreshBtn = document.getElementById('refreshDirectoryBtn');
             const messageElement = document.getElementById('directoryMessage');
-            const directoryElement = document.getElementById('stationDirectory');
-
-            refreshBtn.disabled = true;
             messageElement.textContent = 'Loading station directory...';
 
             fetch(`${BACKEND_URL}/stations`)
@@ -752,8 +748,35 @@
                     messageElement.textContent = `Updated: ${new Date().toLocaleTimeString()}`;
                 })
                 .catch(err => {
+                    const directoryElement = document.getElementById('stationDirectory');
                     directoryElement.innerHTML = '';
                     messageElement.textContent = `Unable to load directory: ${err.message}`;
+                });
+        }
+
+        function refreshStationDirectory() {
+            const refreshBtn = document.getElementById('refreshDirectoryBtn');
+            const messageElement = document.getElementById('directoryMessage');
+
+            refreshBtn.disabled = true;
+            messageElement.textContent = 'Refreshing stations from source...';
+
+            fetch(`${BACKEND_URL}/stations/refresh`, {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({})
+            })
+                .then(response => response.json())
+                .then(data => {
+                    if (!data.success) {
+                        throw new Error(data.error || 'Could not refresh stations');
+                    }
+
+                    messageElement.textContent = data.message || 'Stations refreshed';
+                    fetchStationDirectory();
+                })
+                .catch(err => {
+                    messageElement.textContent = `Unable to refresh stations: ${err.message}`;
                 })
                 .finally(() => {
                     refreshBtn.disabled = false;
