@@ -238,6 +238,13 @@ class CommandHandler(BaseHTTPRequestHandler):
             self._update_stations_source(data)
             return
 
+        if self.path == "/stations/refresh":
+            data = self._read_json_body(optional=True)
+            if data is None:
+                return
+            self._refresh_stations_directory()
+            return
+
         self.send_error(404)
 
     def _read_json_body(self, optional: bool = False) -> dict[str, Any] | None:
@@ -599,6 +606,54 @@ class CommandHandler(BaseHTTPRequestHandler):
             )
 
         self.send_json_response(200, {"success": True, "banks": directory})
+
+    def _refresh_stations_directory(self):
+        try:
+            result = self._run_local(
+                ["/usr/bin/python3", UPDATE_STATIONS_CMD, "--json"],
+                timeout=45,
+            )
+
+            update_result: dict[str, Any] = {}
+            stdout = result.stdout.strip()
+            if stdout:
+                last_line = stdout.rsplit("\n", 1)[-1]
+                try:
+                    update_result = json.loads(last_line)
+                except json.JSONDecodeError:
+                    update_result = {}
+
+            if result.returncode == 0:
+                self.send_json_response(
+                    200,
+                    {
+                        "success": True,
+                        "stations_updated": update_result.get("changed", False),
+                        "message": update_result.get("message", "Stations refreshed"),
+                    },
+                )
+                return
+
+            self.send_json_response(
+                500,
+                {
+                    "success": False,
+                    "error": update_result.get(
+                        "error",
+                        result.stderr.strip() or "Failed to refresh stations",
+                    ),
+                    "error_type": update_result.get("error_type", "refresh_failed"),
+                },
+            )
+        except subprocess.TimeoutExpired:
+            self.send_json_response(
+                500,
+                {
+                    "success": False,
+                    "error": "Timed out downloading stations",
+                    "error_type": "refresh_timeout",
+                },
+            )
 
     def _send_state(self):
         try:
