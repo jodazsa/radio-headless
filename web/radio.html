@@ -885,7 +885,8 @@
         
         // Tuner change debouncing
         let tunerDebounceTimer = null;
-        let stationScrollAnimation = null;
+        let stationScrollFrame = null;
+        let stationScrollRunId = 0;
         
         // Config is not needed for the '(1)' backend
         function fetchConfig() { /* no-op */ }
@@ -1304,10 +1305,14 @@
         function updateStationDisplay(text) {
             const displayElement = document.getElementById('stationDisplay');
 
-            if (stationScrollAnimation) {
-                stationScrollAnimation.cancel();
-                stationScrollAnimation = null;
+            stationScrollRunId += 1;
+            const thisRunId = stationScrollRunId;
+
+            if (stationScrollFrame) {
+                cancelAnimationFrame(stationScrollFrame);
+                stationScrollFrame = null;
             }
+
             
             // Check if text is longer than ~20 characters (needs scrolling)
             if (text.length > 20) {
@@ -1328,21 +1333,29 @@
                     const pixelsPerSecond = 45;
                     const pauseDurationMs = 1000;
                     const moveDurationMs = (scrollDistance / pixelsPerSecond) * 1000;
-                    const totalDurationMs = moveDurationMs + pauseDurationMs;
-                    const endOffset = moveDurationMs / totalDurationMs;
+                    const cycleDurationMs = moveDurationMs + pauseDurationMs;
+                    const moveEndMs = moveDurationMs;
 
-                    stationScrollAnimation = textElement.animate(
-                        [
-                            { transform: 'translateX(0)', offset: 0 },
-                            { transform: `translateX(-${scrollDistance}px)`, offset: endOffset },
-                            { transform: `translateX(-${scrollDistance}px)`, offset: 1 }
-                        ],
-                        {
-                            duration: totalDurationMs,
-                            iterations: Infinity,
-                            easing: 'linear'
+                    const startTimeMs = performance.now();
+
+                    function runScroll(nowMs) {
+                        if (thisRunId !== stationScrollRunId) {
+                            stationScrollFrame = null;
+                            return;
                         }
-                    );
+
+                        const elapsedInCycle = (nowMs - startTimeMs) % cycleDurationMs;
+                        if (elapsedInCycle <= moveEndMs) {
+                            const progress = elapsedInCycle / moveDurationMs;
+                            textElement.style.transform = `translateX(-${scrollDistance * progress}px)`;
+                        } else {
+                            textElement.style.transform = `translateX(-${scrollDistance}px)`;
+                        }
+
+                        stationScrollFrame = requestAnimationFrame(runScroll);
+                    }
+
+                    stationScrollFrame = requestAnimationFrame(runScroll);
                 });
             } else {
                 displayElement.textContent = text;
