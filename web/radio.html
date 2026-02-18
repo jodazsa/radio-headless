@@ -630,7 +630,6 @@
         <div class="controls-row">
             <button class="control-button" id="playBtn" onclick="sendCommand('mpc play')" title="Play">▶</button>
             <button class="control-button" id="pauseBtn" onclick="sendCommand('mpc pause')" title="Pause">❚❚</button>
-            <button class="control-button danger" id="shutdownBtn" onclick="requestShutdown()" title="Shutdown">⏻</button>
         </div>
         
         <div class="tuner-section">
@@ -703,6 +702,10 @@
                 <button class="source-submit" id="stationsSourceSubmit" onclick="submitStationsSource()">Submit</button>
             </div>
             <div class="source-message" id="stationsSourceMessage">Loading current source...</div>
+        </div>
+
+        <div class="controls-row">
+            <button class="control-button danger" id="shutdownBtn" onclick="requestShutdown()" title="Power Down">POWER DOWN</button>
         </div>
 
     </div>
@@ -1256,7 +1259,7 @@
         }
 
         function requestShutdown() {
-            const confirmed = window.confirm('Power off this radio now?');
+            const confirmed = window.confirm('Power down this radio now?\n\nTo turn it back on, unplug it and plug it back in.');
             if (!confirmed) {
                 return;
             }
