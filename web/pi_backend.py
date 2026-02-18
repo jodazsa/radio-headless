@@ -263,6 +263,13 @@ class CommandHandler(BaseHTTPRequestHandler):
             self._refresh_stations_directory()
             return
 
+        if self.path == "/stations/auto-update":
+            data = self._read_json_body(optional=False)
+            if data is None:
+                return
+            self._set_stations_auto_update(data)
+            return
+
         if self.path == "/admin/update":
             data = self._read_json_body(optional=True)
             if data is None:
@@ -461,6 +468,78 @@ class CommandHandler(BaseHTTPRequestHandler):
                 "success": True,
                 "github_url": str(auto_update.get("github_url", "") or ""),
                 "auto_update_enabled": bool(auto_update.get("enabled", True)),
+            },
+        )
+
+
+    def _set_stations_auto_update(self, data: dict[str, Any]):
+        if "enabled" not in data or not isinstance(data.get("enabled"), bool):
+            self.send_json_response(
+                400,
+                {
+                    "success": False,
+                    "error": "enabled (boolean) is required",
+                    "error_type": "invalid_request",
+                },
+            )
+            return
+
+        enabled = bool(data.get("enabled"))
+
+        try:
+            config = yaml.safe_load(HARDWARE_CONFIG_FILE.read_text(encoding="utf-8")) or {}
+        except FileNotFoundError:
+            self.send_json_response(
+                404,
+                {
+                    "success": False,
+                    "error": f"Hardware config file not found: {HARDWARE_CONFIG_FILE}",
+                    "error_type": "hardware_config_not_found",
+                },
+            )
+            return
+        except (OSError, yaml.YAMLError) as exc:
+            self.send_json_response(
+                500,
+                {
+                    "success": False,
+                    "error": str(exc),
+                    "error_type": "hardware_config_read_error",
+                },
+            )
+            return
+
+        if not isinstance(config, dict):
+            config = {}
+
+        auto_update = config.get("auto_update")
+        if not isinstance(auto_update, dict):
+            auto_update = {}
+            config["auto_update"] = auto_update
+
+        auto_update["enabled"] = enabled
+
+        try:
+            HARDWARE_CONFIG_FILE.write_text(
+                yaml.safe_dump(config, sort_keys=False, default_flow_style=False),
+                encoding="utf-8",
+            )
+        except OSError as exc:
+            self.send_json_response(
+                500,
+                {
+                    "success": False,
+                    "error": str(exc),
+                    "error_type": "hardware_config_write_error",
+                },
+            )
+            return
+
+        self.send_json_response(
+            200,
+            {
+                "success": True,
+                "auto_update_enabled": enabled,
             },
         )
 
