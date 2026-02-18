@@ -38,6 +38,20 @@ PLAY_PAUSE_SWITCH_PIN = 24  # BCM GPIO pin for external play/pause on/off switch
 MAX_JUMP = 8    # Max encoder delta per poll (glitch filter)
 I2C_ERR_BACKOFF = 0.2  # Seconds to wait after I2C error
 
+# Playback watchdog: auto-resume streams that stop unexpectedly.
+# After detecting MPD in "stop" state, wait WATCHDOG_GRACE_SEC before
+# restarting so we don't fight intentional pauses or brief interruptions.
+# On repeated failures the delay grows exponentially up to the max.
+WATCHDOG_GRACE_SEC = 10.0
+WATCHDOG_CHECK_INTERVAL = 5.0  # How often to poll MPD state for watchdog
+WATCHDOG_BACKOFF_MAX = 320.0   # Cap on exponential backoff (seconds)
+
+# Station types that represent infinite streams (should never end on their
+# own).  Local-file types like "file" or "dir" can legitimately finish.
+_STREAM_TYPES = frozenset({
+    "stream",
+})
+
 # Setup logging
 logger = setup_logging('rotary-controller', Path('/home/radio/logs/rotary.log'))
 
@@ -235,6 +249,19 @@ class StationsCache:
         s = b.get("stations", {})
         return isinstance(s, dict) and station in s
 
+    def station_type(self, bank: int, station: int) -> Optional[str]:
+        """Return the station type (e.g. 'stream', 'file_loop') or None."""
+        self._reload_if_needed()
+        banks = self._data.get("banks", {})
+        b = banks.get(bank)
+        if not isinstance(b, dict):
+            return None
+        s = b.get("stations", {})
+        entry = s.get(station) if isinstance(s, dict) else None
+        if not isinstance(entry, dict):
+            return None
+        return (entry.get("type") or "").strip() or None
+
 
 def main():
     """Main rotary controller loop."""
@@ -410,6 +437,12 @@ def main():
     last_invalid_bank_log = 0.0
     last_invalid_station_log = 0.0
     
+    # Playback watchdog state
+    watchdog_stop_since = 0.0      # monotonic time when we first saw "stop"
+    watchdog_last_check = 0.0      # last time we queried MPD for watchdog
+    watchdog_backoff = WATCHDOG_GRACE_SEC  # current grace period (grows on repeated failures)
+    watchdog_last_restart = 0.0    # when we last issued a watchdog restart
+
     logger.info("Entering main loop")
 
     stations_cache = StationsCache(STATIONS_PATH)
@@ -504,6 +537,9 @@ def main():
                         sh(["radio-play", str(cur_bank), str(cur_station)])
                         playing_bank = cur_bank
                         playing_station = cur_station
+                        # Reset watchdog for the new station
+                        watchdog_stop_since = 0.0
+                        watchdog_backoff = WATCHDOG_GRACE_SEC
                 else:
                     logger.warning(f"Station does not exist: Bank {cur_bank}, Station {cur_station}")
             
@@ -579,6 +615,8 @@ def main():
                         sh(["radio-play", str(cur_bank), str(cur_station)])
                         playing_bank = cur_bank
                         playing_station = cur_station
+                        watchdog_stop_since = 0.0
+                        watchdog_backoff = WATCHDOG_GRACE_SEC
                     else:
                         logger.info("Play switch ON: resuming playback")
                         mpd_conn.play()
@@ -586,6 +624,48 @@ def main():
                     logger.info("Play switch OFF: pausing playback")
                     mpd_conn.pause()
             
+            # ── Playback watchdog ─────────────────────────────────
+            # Detect when a stream has stopped unexpectedly (TLS
+            # error, server disconnect, MPD restart with empty
+            # playlist) and automatically re-trigger playback.
+            if play_enabled and now - watchdog_last_check >= WATCHDOG_CHECK_INTERVAL:
+                watchdog_last_check = now
+                stype = stations_cache.station_type(playing_bank, playing_station)
+                if stype in _STREAM_TYPES:
+                    try:
+                        mpd_state = mpd_conn.status().get("state", "")
+                    except Exception:
+                        mpd_state = ""
+                    if mpd_state == "stop":
+                        if watchdog_stop_since == 0.0:
+                            watchdog_stop_since = now
+                            logger.info(
+                                "Watchdog: stream stopped, waiting %.0fs before restart",
+                                watchdog_backoff,
+                            )
+                        elif now - watchdog_stop_since >= watchdog_backoff:
+                            logger.info(
+                                "Watchdog: restarting Bank %d, Station %d "
+                                "(stopped for %.1fs)",
+                                playing_bank,
+                                playing_station,
+                                now - watchdog_stop_since,
+                            )
+                            sh(["radio-play", str(playing_bank), str(playing_station)])
+                            watchdog_last_restart = now
+                            watchdog_stop_since = 0.0
+                            # Exponential backoff: double the grace period
+                            # so a persistently broken stream doesn't hammer
+                            watchdog_backoff = min(
+                                watchdog_backoff * 2, WATCHDOG_BACKOFF_MAX
+                            )
+                    else:
+                        # MPD is playing/paused — reset watchdog state
+                        if watchdog_stop_since != 0.0:
+                            logger.info("Watchdog: playback resumed, resetting")
+                        watchdog_stop_since = 0.0
+                        watchdog_backoff = WATCHDOG_GRACE_SEC
+
             # Sleep until next poll
             time.sleep(poll_interval)
         
