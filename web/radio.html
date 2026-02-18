@@ -682,8 +682,8 @@
         <div class="volume-section">
             <div class="volume-label">Volume</div>
             <div class="volume-control">
-                <input type="range" id="volumeSlider" min="0" max="100" value="30">
-                <span class="volume-value" id="volumeValue">30</span>
+                <input type="range" id="volumeSlider" min="0" max="100" value="0" disabled>
+                <span class="volume-value" id="volumeValue">--</span>
             </div>
         </div>
 
@@ -713,6 +713,7 @@
             : window.location.origin;
         // Note: this backend does not require a per-request host field.
         let volumeDebounceTimer = null;
+        let hasSyncedVolume = false;
         let isCommandPending = false;
         let statusUpdateInterval = null;
         
@@ -995,6 +996,10 @@
         
         volumeSlider.addEventListener('input', function(e) {
             volumeValue.textContent = e.target.value;
+
+            if (!hasSyncedVolume) {
+                return;
+            }
             
             if (volumeDebounceTimer) {
                 clearTimeout(volumeDebounceTimer);
@@ -1146,6 +1151,8 @@
                     if (data.volume !== undefined) {
                         document.getElementById('volumeSlider').value = data.volume;
                         document.getElementById('volumeValue').textContent = data.volume;
+                        document.getElementById('volumeSlider').disabled = false;
+                        hasSyncedVolume = true;
                     }
                     
                     if (data.is_playing && data.current_track) {
@@ -1274,9 +1281,7 @@
                     submitStationsSource();
                 }
             });
-            setTimeout(() => {
-                startStatusUpdates();
-            }, 1000);
+            startStatusUpdates();
         });
     </script>
 </body>
