@@ -536,6 +536,116 @@
             }
         }
 
+        /* Admin panel */
+        .admin-toggle-row {
+            margin-top: 10px;
+        }
+
+        .admin-section {
+            margin-top: 10px;
+            background: #1a1a1a;
+            border: 2px solid #333;
+            border-radius: 6px;
+            padding: 15px;
+        }
+
+        .admin-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 14px;
+        }
+
+        .admin-label {
+            color: #ff8c00;
+            font-size: 12px;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            font-weight: bold;
+        }
+
+        .admin-version {
+            color: #555;
+            font-size: 11px;
+            font-family: 'Courier New', monospace;
+        }
+
+        .admin-row {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 10px;
+        }
+
+        .admin-action-btn {
+            background: linear-gradient(180deg, #2a2a2a 0%, #1a1a1a 100%);
+            border: 2px solid #444;
+            color: #ff8c00;
+            padding: 10px 16px;
+            border-radius: 6px;
+            font-size: 12px;
+            font-weight: bold;
+            cursor: pointer;
+            letter-spacing: 1px;
+            white-space: nowrap;
+            min-width: 150px;
+            box-shadow: 0 2px 0 #000;
+        }
+
+        .admin-action-btn:hover:not(:disabled) {
+            background: linear-gradient(180deg, #3a3a3a 0%, #2a2a2a 100%);
+        }
+
+        .admin-action-btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .admin-action-btn.danger {
+            color: #ff5c5c;
+            border-color: #663333;
+        }
+
+        .admin-action-btn.danger:hover:not(:disabled) {
+            background: linear-gradient(180deg, #4a2a2a 0%, #2a1a1a 100%);
+        }
+
+        .admin-desc {
+            color: #777;
+            font-size: 12px;
+            font-family: 'Courier New', monospace;
+        }
+
+        .admin-log {
+            background: #0d0d0d;
+            border: 1px solid #444;
+            border-radius: 4px;
+            padding: 10px;
+            font-family: 'Courier New', monospace;
+            font-size: 11px;
+            color: #aaa;
+            white-space: pre-wrap;
+            max-height: 220px;
+            overflow-y: auto;
+            margin-bottom: 10px;
+        }
+
+        .admin-divider {
+            border: none;
+            border-top: 1px solid #333;
+            margin: 12px 0;
+        }
+
+        .admin-message {
+            margin-top: 6px;
+            font-size: 12px;
+            font-family: 'Courier New', monospace;
+            color: #bbb;
+        }
+
+        .admin-message.success { color: #4CAF50; }
+        .admin-message.error   { color: #ff5c5c; }
+
         .volume-label {
             color: #ff8c00;
             font-size: 12px;
@@ -706,6 +816,53 @@
 
         <div class="controls-row">
             <button class="control-button danger" id="shutdownBtn" onclick="requestShutdown()" title="Power Down">POWER DOWN</button>
+        </div>
+
+        <!-- Admin toggle -->
+        <div class="controls-row admin-toggle-row">
+            <button class="control-button" id="adminToggleBtn" onclick="toggleAdminPanel()">ADMIN</button>
+        </div>
+
+        <!-- Admin panel -->
+        <div id="adminPanel" style="display:none;">
+            <div class="admin-section">
+                <div class="admin-header">
+                    <div class="admin-label">System Administration</div>
+                    <div class="admin-version" id="adminVersion">Loading version...</div>
+                </div>
+
+                <!-- Update from GitHub -->
+                <div class="admin-row">
+                    <button class="admin-action-btn" id="updateBtn" onclick="startUpdate()">Update Software</button>
+                    <span class="admin-desc">git pull + deploy-rotary.sh</span>
+                </div>
+                <div id="updateLog" class="admin-log" style="display:none;"></div>
+
+                <hr class="admin-divider">
+
+                <!-- Restart service -->
+                <div class="admin-row">
+                    <button class="admin-action-btn" id="restartBtn" onclick="requestRestartService()">Restart Service</button>
+                    <span class="admin-desc">Restart the radio web backend</span>
+                </div>
+
+                <!-- Reboot Pi -->
+                <div class="admin-row">
+                    <button class="admin-action-btn danger" id="rebootBtn" onclick="requestReboot()">Reboot Pi</button>
+                    <span class="admin-desc">Full Raspberry Pi reboot (~1 min)</span>
+                </div>
+
+                <hr class="admin-divider">
+
+                <!-- View logs -->
+                <div class="admin-row">
+                    <button class="admin-action-btn" id="logsBtn" onclick="fetchServiceLogs()">View Logs</button>
+                    <span class="admin-desc">Recent service journal output</span>
+                </div>
+                <div id="serviceLogs" class="admin-log" style="display:none;"></div>
+
+                <div class="admin-message" id="adminMessage"></div>
+            </div>
         </div>
 
     </div>
@@ -1309,6 +1466,242 @@
             });
             startStatusUpdates();
         });
+
+        // ── Admin panel ──────────────────────────────────────────────────────
+
+        let adminLogInterval = null;
+
+        function toggleAdminPanel() {
+            const panel = document.getElementById('adminPanel');
+            const btn   = document.getElementById('adminToggleBtn');
+            const open  = panel.style.display === 'none';
+            panel.style.display = open ? 'block' : 'none';
+            btn.textContent = open ? 'ADMIN ▲' : 'ADMIN';
+            if (open) fetchAdminVersion();
+        }
+
+        function fetchAdminVersion() {
+            fetch(`${BACKEND_URL}/admin/version`)
+                .then(r => r.json())
+                .then(data => {
+                    document.getElementById('adminVersion').textContent =
+                        data.success ? data.version : '(version unavailable)';
+                })
+                .catch(() => {
+                    document.getElementById('adminVersion').textContent = '(version unavailable)';
+                });
+        }
+
+        // ── Update from GitHub ───────────────────────────────────────────────
+
+        function startUpdate() {
+            if (!confirm(
+                'Update software from GitHub?\n\n' +
+                'This runs:\n  git fetch origin\n  git pull --ff-only origin main\n  ./deploy-rotary.sh\n\n' +
+                'The service will restart. This takes about a minute.'
+            )) return;
+
+            const btn    = document.getElementById('updateBtn');
+            const logDiv = document.getElementById('updateLog');
+
+            btn.disabled          = true;
+            logDiv.style.display  = 'block';
+            logDiv.textContent    = 'Starting update...\n';
+            showAdminMessage('', false);
+
+            fetch(`${BACKEND_URL}/admin/update`, {
+                method:  'POST',
+                headers: {'Content-Type': 'application/json'},
+                body:    JSON.stringify({}),
+            })
+            .then(r => r.json())
+            .then(data => {
+                if (!data.success) {
+                    logDiv.textContent = 'Error: ' + (data.error || 'Unknown error');
+                    btn.disabled = false;
+                    return;
+                }
+                startAdminLogPolling();
+            })
+            .catch(err => {
+                logDiv.textContent = 'Connection error: ' + err.message;
+                btn.disabled = false;
+            });
+        }
+
+        function startAdminLogPolling() {
+            if (adminLogInterval) clearInterval(adminLogInterval);
+
+            let serverWentDown = false;
+
+            adminLogInterval = setInterval(() => {
+                fetch(`${BACKEND_URL}/admin/log`)
+                .then(r => r.json())
+                .then(data => {
+                    const logDiv = document.getElementById('updateLog');
+                    if (data.success && data.log !== undefined) {
+                        logDiv.textContent = data.log;
+                        logDiv.scrollTop   = logDiv.scrollHeight;
+                    }
+
+                    if (data.done) {
+                        clearInterval(adminLogInterval);
+                        adminLogInterval = null;
+                        document.getElementById('updateBtn').disabled = false;
+                        fetchAdminVersion();
+                        showAdminMessage('Update complete! Reload the page to load the latest UI.', true);
+                    } else if (data.failed) {
+                        clearInterval(adminLogInterval);
+                        adminLogInterval = null;
+                        document.getElementById('updateBtn').disabled = false;
+                        showAdminMessage('Update failed. See log above for details.', false);
+                    } else if (serverWentDown) {
+                        // Server came back — check log one more time then finish
+                        serverWentDown = false;
+                    }
+                })
+                .catch(() => {
+                    if (!serverWentDown) {
+                        serverWentDown = true;
+                        const logDiv = document.getElementById('updateLog');
+                        logDiv.textContent += '\n--- Service restarting... ---';
+                        logDiv.scrollTop    = logDiv.scrollHeight;
+                        showAdminMessage('Service is restarting — waiting for it to come back...', false);
+                    }
+                    // Server still down; keep polling — the next successful fetch will continue
+                });
+            }, 2000);
+        }
+
+        // ── Restart service ──────────────────────────────────────────────────
+
+        function requestRestartService() {
+            if (!confirm('Restart the radio web service?\n\nThe page will reconnect automatically.')) return;
+
+            const btn = document.getElementById('restartBtn');
+            btn.disabled = true;
+            showAdminMessage('Restarting service...', false);
+
+            fetch(`${BACKEND_URL}/admin/restart`, {
+                method:  'POST',
+                headers: {'Content-Type': 'application/json'},
+                body:    JSON.stringify({}),
+            })
+            .then(r => r.json())
+            .then(data => {
+                if (data.success) {
+                    waitForServerReturn(() => {
+                        btn.disabled = false;
+                        showAdminMessage('Service restarted successfully!', true);
+                    });
+                } else {
+                    showAdminMessage('Restart failed: ' + (data.error || 'Unknown error'), false);
+                    btn.disabled = false;
+                }
+            })
+            .catch(err => {
+                // Connection may already be gone — assume restart is in progress
+                waitForServerReturn(() => {
+                    btn.disabled = false;
+                    showAdminMessage('Service restarted successfully!', true);
+                });
+            });
+        }
+
+        // ── Reboot Pi ────────────────────────────────────────────────────────
+
+        function requestReboot() {
+            if (!confirm(
+                'Reboot the Raspberry Pi now?\n\n' +
+                'The radio will be unavailable for about a minute.'
+            )) return;
+
+            const btn = document.getElementById('rebootBtn');
+            btn.disabled = true;
+            showAdminMessage('Rebooting...', false);
+            updateConnectionIndicator(false, 'REBOOTING');
+
+            fetch(`${BACKEND_URL}/admin/reboot`, {
+                method:  'POST',
+                headers: {'Content-Type': 'application/json'},
+                body:    JSON.stringify({}),
+            })
+            .then(r => r.json())
+            .then(data => {
+                if (data.success) {
+                    showAdminMessage('Pi is rebooting — will reconnect when it comes back online.', false);
+                    waitForServerReturn(() => {
+                        btn.disabled = false;
+                        showAdminMessage('Pi is back online!', true);
+                        updateConnectionIndicator(true, 'CONNECTED');
+                    });
+                } else {
+                    showAdminMessage('Reboot failed: ' + (data.error || 'Unknown error'), false);
+                    btn.disabled = false;
+                }
+            })
+            .catch(() => {
+                // Already rebooting
+                showAdminMessage('Pi is rebooting — will reconnect when it comes back online.', false);
+                waitForServerReturn(() => {
+                    btn.disabled = false;
+                    showAdminMessage('Pi is back online!', true);
+                    updateConnectionIndicator(true, 'CONNECTED');
+                });
+            });
+        }
+
+        // ── View service logs ────────────────────────────────────────────────
+
+        function fetchServiceLogs() {
+            const btn    = document.getElementById('logsBtn');
+            const logDiv = document.getElementById('serviceLogs');
+
+            btn.disabled         = true;
+            logDiv.style.display = 'block';
+            logDiv.textContent   = 'Loading logs...';
+
+            fetch(`${BACKEND_URL}/admin/service-logs`)
+            .then(r => r.json())
+            .then(data => {
+                logDiv.textContent = data.success
+                    ? (data.logs || '(no log output)')
+                    : ('Error: ' + (data.error || 'Could not fetch logs'));
+                logDiv.scrollTop = logDiv.scrollHeight;
+            })
+            .catch(err => {
+                logDiv.textContent = 'Connection error: ' + err.message;
+            })
+            .finally(() => {
+                btn.disabled = false;
+            });
+        }
+
+        // ── Helpers ──────────────────────────────────────────────────────────
+
+        function waitForServerReturn(callback) {
+            const checkInterval = setInterval(() => {
+                fetch(`${BACKEND_URL}/status`, {
+                    method:  'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body:    JSON.stringify({}),
+                })
+                .then(r => r.json())
+                .then(data => {
+                    if (data.success) {
+                        clearInterval(checkInterval);
+                        if (callback) callback();
+                    }
+                })
+                .catch(() => { /* still down, keep waiting */ });
+            }, 3000);
+        }
+
+        function showAdminMessage(msg, success) {
+            const el = document.getElementById('adminMessage');
+            el.textContent = msg;
+            el.className   = 'admin-message' + (msg ? (success ? ' success' : ' error') : '');
+        }
     </script>
 </body>
 </html>
