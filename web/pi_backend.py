@@ -32,6 +32,12 @@ STATIONS_FILE = Path(os.getenv("RADIO_STATIONS_FILE", "/home/radio/stations.yaml
 HARDWARE_CONFIG_FILE = Path(os.getenv("RADIO_HARDWARE_CONFIG_FILE", "/home/radio/hardware-rotary.yaml"))
 UPDATE_STATIONS_CMD = os.getenv("RADIO_UPDATE_STATIONS_CMD", "/usr/local/bin/update-stations")
 
+# Admin / maintenance settings
+_SCRIPT_DIR = Path(__file__).resolve().parent
+REPO_DIR = Path(os.getenv("RADIO_REPO_DIR", str(_SCRIPT_DIR.parent)))
+DEPLOY_SCRIPT = Path(os.getenv("RADIO_DEPLOY_SCRIPT", str(_SCRIPT_DIR.parent / "deploy-rotary.sh")))
+ADMIN_LOG_FILE = Path(os.getenv("RADIO_ADMIN_LOG_FILE", "/tmp/radio-admin.log"))
+
 ALLOWED_COMMANDS = [
     r"^mpc\s+(play|pause|stop|next|prev|volume\s+\d{1,3})$",
     r"^radio-play\s+\d+\s+\d+$",
@@ -163,6 +169,18 @@ class CommandHandler(BaseHTTPRequestHandler):
             )
             return
 
+        if self.path == "/admin/log":
+            self._get_admin_log()
+            return
+
+        if self.path == "/admin/service-logs":
+            self._get_service_logs()
+            return
+
+        if self.path == "/admin/version":
+            self._get_version()
+            return
+
         if self.path.startswith("/") and self.path.count("/") == 1 and not self.path.endswith("/"):
             self._send_static_file(self.path[1:])
             return
@@ -243,6 +261,27 @@ class CommandHandler(BaseHTTPRequestHandler):
             if data is None:
                 return
             self._refresh_stations_directory()
+            return
+
+        if self.path == "/admin/update":
+            data = self._read_json_body(optional=True)
+            if data is None:
+                return
+            self._start_update()
+            return
+
+        if self.path == "/admin/reboot":
+            data = self._read_json_body(optional=True)
+            if data is None:
+                return
+            self._do_reboot()
+            return
+
+        if self.path == "/admin/restart":
+            data = self._read_json_body(optional=True)
+            if data is None:
+                return
+            self._restart_service()
             return
 
         self.send_error(404)
@@ -702,6 +741,121 @@ class CommandHandler(BaseHTTPRequestHandler):
                 "playback_state": parsed.get("playback_state", "stopped"),
             },
         )
+
+    def _start_update(self):
+        """Start a background git fetch+pull+deploy in a detached process."""
+        repo = shlex.quote(str(REPO_DIR))
+        deploy = shlex.quote(str(DEPLOY_SCRIPT))
+        log_path = shlex.quote(str(ADMIN_LOG_FILE))
+
+        if not REPO_DIR.is_dir():
+            self.send_json_response(
+                500,
+                {"success": False, "error": f"Repo dir not found: {REPO_DIR}", "error_type": "repo_not_found"},
+            )
+            return
+
+        if not DEPLOY_SCRIPT.is_file():
+            self.send_json_response(
+                500,
+                {"success": False, "error": f"Deploy script not found: {DEPLOY_SCRIPT}", "error_type": "deploy_script_not_found"},
+            )
+            return
+
+        script = (
+            f"exec > {log_path} 2>&1\n"
+            "set -e\n"
+            f"cd {repo}\n"
+            'echo "=== Update started: $(date) ==="\n'
+            "echo '--- git fetch origin ---'\n"
+            "git fetch origin\n"
+            "echo '--- git pull --ff-only origin main ---'\n"
+            "git pull --ff-only origin main\n"
+            "echo '--- Running deploy-rotary.sh ---'\n"
+            f"bash {deploy}\n"
+            'echo ""\n'
+            "echo '=== UPDATE_DONE ==='\n"
+        )
+
+        try:
+            subprocess.Popen(
+                ["bash", "-c", script],
+                close_fds=True,
+                start_new_session=True,  # detach so service restart won't kill this process
+            )
+            self.send_json_response(200, {"success": True, "message": "Update started"})
+        except OSError as exc:
+            self.send_json_response(
+                500,
+                {"success": False, "error": str(exc), "error_type": "update_launch_failed"},
+            )
+
+    def _get_admin_log(self):
+        try:
+            if not ADMIN_LOG_FILE.exists():
+                self.send_json_response(200, {"success": True, "log": ""})
+                return
+            log_text = ADMIN_LOG_FILE.read_text(encoding="utf-8", errors="replace")
+            done = "=== UPDATE_DONE ===" in log_text
+            failed = "=== UPDATE_FAILED ===" in log_text
+            self.send_json_response(200, {"success": True, "log": log_text, "done": done, "failed": failed})
+        except OSError as exc:
+            self.send_json_response(500, {"success": False, "error": str(exc), "error_type": "log_read_error"})
+
+    def _get_service_logs(self):
+        try:
+            result = self._run_local(
+                [
+                    "journalctl",
+                    "-u", "radio-web-backend.service",
+                    "-u", "rotary-controller.service",
+                    "-n", "100",
+                    "--no-pager",
+                    "--output=short",
+                ],
+                timeout=10,
+            )
+            logs = result.stdout or result.stderr or "(no output)"
+            self.send_json_response(200, {"success": True, "logs": logs})
+        except subprocess.TimeoutExpired:
+            self.send_json_response(504, {"success": False, "error": "Log fetch timed out", "error_type": "timeout"})
+        except FileNotFoundError as exc:
+            self.send_json_response(500, {"success": False, "error": f"Command not found: {exc}", "error_type": "command_not_found"})
+
+    def _get_version(self):
+        try:
+            result = self._run_local(
+                ["git", "-C", str(REPO_DIR), "log", "-1", "--pretty=format:%h %s (%cr)"],
+                timeout=5,
+            )
+            if result.returncode == 0:
+                self.send_json_response(200, {"success": True, "version": result.stdout.strip()})
+            else:
+                self.send_json_response(200, {"success": True, "version": "(git info unavailable)"})
+        except (subprocess.TimeoutExpired, FileNotFoundError):
+            self.send_json_response(200, {"success": True, "version": "(git info unavailable)"})
+
+    def _do_reboot(self):
+        try:
+            subprocess.Popen(
+                ["bash", "-c", "sleep 3 && sudo reboot"],
+                close_fds=True,
+                start_new_session=True,
+            )
+            self.send_json_response(200, {"success": True, "message": "Rebooting in 3 seconds"})
+        except OSError as exc:
+            self.send_json_response(500, {"success": False, "error": str(exc), "error_type": "reboot_failed"})
+
+    def _restart_service(self):
+        try:
+            subprocess.Popen(
+                ["bash", "-c", "sleep 2 && sudo systemctl restart radio-web-backend.service"],
+                close_fds=True,
+                start_new_session=True,
+            )
+            self.send_json_response(200, {"success": True, "message": "Service restarting in 2 seconds"})
+        except OSError as exc:
+            self.send_json_response(500, {"success": False, "error": str(exc), "error_type": "restart_failed"})
 
     def send_json_response(self, status_code: int, data: dict[str, Any]):
         self.send_response(status_code)
