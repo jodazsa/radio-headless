@@ -99,7 +99,7 @@ banks:
         name: "Life FM Branson"
         type: stream
         url: "https://a8.asurahosting.com:8000/radio.mp3"
-  1:
+  2:
     name: "Reggaeton"
     stations:
       0:
