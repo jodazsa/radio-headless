@@ -727,10 +727,21 @@ class CommandHandler(BaseHTTPRequestHandler):
 
     def _refresh_stations_directory(self):
         try:
-            result = self._run_local(
-                ["/usr/bin/python3", UPDATE_STATIONS_CMD, "--json"],
-                timeout=45,
-            )
+            # Read the configured URL from hardware config so the refresh always
+            # fetches from the configured source, bypassing the auto_update enabled flag.
+            cmd = ["/usr/bin/python3", UPDATE_STATIONS_CMD, "--json"]
+            try:
+                hw_config = yaml.safe_load(HARDWARE_CONFIG_FILE.read_text(encoding="utf-8")) or {}
+                if isinstance(hw_config, dict):
+                    auto_update = hw_config.get("auto_update") or {}
+                    if isinstance(auto_update, dict):
+                        github_url = str(auto_update.get("github_url", "") or "").strip()
+                        if github_url:
+                            cmd = ["/usr/bin/python3", UPDATE_STATIONS_CMD, "--url", github_url, "--json"]
+            except (OSError, yaml.YAMLError):
+                pass
+
+            result = self._run_local(cmd, timeout=45)
 
             update_result: dict[str, Any] = {}
             stdout = result.stdout.strip()
@@ -940,6 +951,7 @@ class CommandHandler(BaseHTTPRequestHandler):
         self.send_response(status_code)
         self.send_header("Content-Type", "application/json")
         self.send_header("Access-Control-Allow-Origin", "*")
+        self.send_header("Cache-Control", "no-cache, no-store")
         self.end_headers()
         self.wfile.write(json.dumps(data).encode("utf-8"))
 

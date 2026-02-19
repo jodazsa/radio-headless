@@ -15,7 +15,7 @@ import yaml
 from pathlib import Path
 from datetime import datetime
 from typing import Dict, Any
-from urllib.request import urlopen
+from urllib.request import Request, urlopen
 from urllib.error import URLError, HTTPError
 
 # Import shared utilities
@@ -74,9 +74,13 @@ def download_stations(url: str, logger) -> bytes:
         URLError: If network error occurs
     """
     logger.info(f"Downloading from: {url}")
-    
+
     try:
-        with urlopen(url, timeout=30) as response:
+        request = Request(url, headers={
+            "Cache-Control": "no-cache",
+            "Pragma": "no-cache",
+        })
+        with urlopen(request, timeout=30) as response:
             content = response.read()
             logger.info(f"Downloaded {len(content)} bytes")
             return content

@@ -896,7 +896,7 @@
             const messageElement = document.getElementById('directoryMessage');
             messageElement.textContent = 'Loading station directory...';
 
-            fetch(`${BACKEND_URL}/stations`)
+            fetch(`${BACKEND_URL}/stations`, { cache: 'no-store' })
                 .then(response => response.json())
                 .then(data => {
                     if (!data.success || !Array.isArray(data.banks)) {
@@ -1086,6 +1086,7 @@
                     } else {
                         message.textContent = data.message || 'Source saved, stations already up to date';
                         message.className = 'source-message';
+                        fetchStationDirectory();
                     }
                 })
                 .catch(err => {
