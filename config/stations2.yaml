@@ -100,50 +100,7 @@ banks:
         type: stream
         url: "https://a8.asurahosting.com:8000/radio.mp3"
   2:
-    name: "Reggaeton"
-    stations:
-      0:
-        name: "WBGO"
-        type: stream
-        url: "https://ais-sa8.cdnstream1.com/3629_64.aac"
-      1:
-        name: "WWOZ New Orleans"
-        type: stream
-        url: "http://wwoz-sc.streamguys.com/wwoz-hi.mp3"
-      2:
-        name: "WDCB"
-        type: stream
-        url: "https://wdcb-ice.streamguys1.com/mobile-AAC"
-      3:
-        name: "KMHD"
-        type: stream
-        url: "https://ais-sa3.cdnstream1.com/2442_128.aac/playlist.m3u8"
-      4:
-        name: "KCSM"
-        type: stream
-        url: "https://ice7.securenetsystems.net/KCSM2"
-      5:
-        name: "WPFW"
-        type: stream
-        url: "https://streams.pacifica.org:9000/wpfw_128"
-      6:
-        name: "KUVO"
-        type: stream
-        url: "https://kuvo.streamguys1.com/kuvo-aac-128"
-      7:
-        name: "CJRT 91.1 Jazz FM"
-        type: stream
-        url: "https://hil-streamb1-ais-relay1.streamb.live/SB00009/playlist.m3u8"
-      8:
-        name: "Jazz 88.3 San Diego"
-        type: stream
-        url: "https://ksds-ice.streamguys1.com/ksds.mp3"
-      9:
-        name: "Czech Jazz"
-        type: stream
-        url: "https://rozhlas.stream/jazz_high.aac"
-  2:
-    name: "Around the US"
+    name: "Reggaeton - NEED TO UPDATE"
     stations:
       0:
         name: "WFMU 91.1 Hudsdon Valley"
