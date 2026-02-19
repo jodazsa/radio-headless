@@ -727,8 +727,47 @@ class CommandHandler(BaseHTTPRequestHandler):
 
     def _refresh_stations_directory(self):
         try:
+            config = yaml.safe_load(HARDWARE_CONFIG_FILE.read_text(encoding="utf-8")) or {}
+        except FileNotFoundError:
+            self.send_json_response(
+                404,
+                {
+                    "success": False,
+                    "error": f"Hardware config file not found: {HARDWARE_CONFIG_FILE}",
+                    "error_type": "hardware_config_not_found",
+                },
+            )
+            return
+        except (OSError, yaml.YAMLError) as exc:
+            self.send_json_response(
+                500,
+                {
+                    "success": False,
+                    "error": str(exc),
+                    "error_type": "hardware_config_read_error",
+                },
+            )
+            return
+
+        auto_update = config.get("auto_update", {}) if isinstance(config, dict) else {}
+        github_url = ""
+        if isinstance(auto_update, dict):
+            github_url = str(auto_update.get("github_url", "") or "").strip()
+
+        if not github_url:
+            self.send_json_response(
+                400,
+                {
+                    "success": False,
+                    "error": "No stations source URL configured",
+                    "error_type": "source_not_configured",
+                },
+            )
+            return
+
+        try:
             result = self._run_local(
-                ["/usr/bin/python3", UPDATE_STATIONS_CMD, "--json"],
+                ["/usr/bin/python3", UPDATE_STATIONS_CMD, "--url", github_url, "--json"],
                 timeout=45,
             )
 

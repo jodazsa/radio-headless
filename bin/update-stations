@@ -15,7 +15,7 @@ import yaml
 from pathlib import Path
 from datetime import datetime
 from typing import Dict, Any
-from urllib.request import urlopen
+from urllib.request import Request, urlopen
 from urllib.error import URLError, HTTPError
 
 # Import shared utilities
@@ -75,8 +75,19 @@ def download_stations(url: str, logger) -> bytes:
     """
     logger.info(f"Downloading from: {url}")
     
+    # Set explicit anti-cache headers so GitHub/ref URLs and intermediary
+    # proxies do not hand us stale content after recent commits.
+    request = Request(
+        url,
+        headers={
+            "Cache-Control": "no-cache",
+            "Pragma": "no-cache",
+            "User-Agent": "radio-headless-update-stations/1.0",
+        },
+    )
+
     try:
-        with urlopen(url, timeout=30) as response:
+        with urlopen(request, timeout=30) as response:
             content = response.read()
             logger.info(f"Downloaded {len(content)} bytes")
             return content
