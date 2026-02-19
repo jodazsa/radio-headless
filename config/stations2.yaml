@@ -68,34 +68,30 @@ banks:
         type: stream
         url: "https://maestro.emfcdn.com/stream_for/k-love-2010s/airable/aac"
       4:
-        name: "K-Love Nashville"
-        type: stream
-        url: "https://emf-seg001172.cdnstream1.com/seg001172-h128/playlist.m3u8"
-      5:
         name: "K-Love 90.7"
         type: stream
         url: "https://maestro.emfcdn.com/stream_for/k-love/tunein"
-      6:
+      5:
         name: "WGTS 91.9 Washington DC"
         type: stream
         url: "https://wgts-live-a.edge.audiocdn.com/10320"
-      7:
+      6:
         name: "Moody Radio Mena"
         type: stream
         url: "https://14123.live.streamtheworld.com/MB2.mp3"
-      8:
+      7:
         name: "Abiding Radio - Bluegrass Hymns"
         type: stream
         url: "https://streams.abidingradio.com:7840/1"
-      9:
+      8:
         name: "Gospel Radio Nation - Houston TX"
         type: stream
         url: "https://radio.garden/api/ara/content/listen/ChIeY4ke/channel.mp3?1771506047715"
-      10:
+      9:
         name: "KXOJ Tulsa"
         type: stream
         url: "https://ice7.securenetsystems.net/KXOJ"
-      11:
+      10:
         name: "Life FM Branson"
         type: stream
         url: "https://a8.asurahosting.com:8000/radio.mp3"
