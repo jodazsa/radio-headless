@@ -442,6 +442,7 @@ def main():
     watchdog_last_check = 0.0      # last time we queried MPD for watchdog
     watchdog_backoff = WATCHDOG_GRACE_SEC  # current grace period (grows on repeated failures)
     watchdog_last_restart = 0.0    # when we last issued a watchdog restart
+    watchdog_last_skip_log = 0.0   # last time we logged a "skipped, not a stream" message
 
     logger.info("Entering main loop")
 
@@ -633,23 +634,39 @@ def main():
                 stype = stations_cache.station_type(playing_bank, playing_station)
                 if stype in _STREAM_TYPES:
                     try:
-                        mpd_state = mpd_conn.status().get("state", "")
-                    except Exception:
+                        mpd_status = mpd_conn.status()
+                        mpd_state = mpd_status.get("state", "")
+                    except Exception as _wex:
+                        logger.warning("Watchdog: MPD status error: %s", _wex)
                         mpd_state = ""
+                        mpd_status = {}
+                    logger.debug(
+                        "Watchdog check: MPD state=%r bank=%d station=%d "
+                        "elapsed=%.0fs backoff=%.0fs",
+                        mpd_state,
+                        playing_bank,
+                        playing_station,
+                        now - watchdog_stop_since if watchdog_stop_since else 0,
+                        watchdog_backoff,
+                    )
                     if mpd_state == "stop":
                         if watchdog_stop_since == 0.0:
                             watchdog_stop_since = now
                             logger.info(
-                                "Watchdog: stream stopped, waiting %.0fs before restart",
+                                "Watchdog: stream stopped, waiting %.0fs before restart "
+                                "(bank=%d station=%d)",
                                 watchdog_backoff,
+                                playing_bank,
+                                playing_station,
                             )
                         elif now - watchdog_stop_since >= watchdog_backoff:
                             logger.info(
                                 "Watchdog: restarting Bank %d, Station %d "
-                                "(stopped for %.1fs)",
+                                "(stopped for %.1fs, backoff=%.0fs)",
                                 playing_bank,
                                 playing_station,
                                 now - watchdog_stop_since,
+                                watchdog_backoff,
                             )
                             sh(["radio-play", str(playing_bank), str(playing_station)])
                             watchdog_last_restart = now
@@ -659,12 +676,40 @@ def main():
                             watchdog_backoff = min(
                                 watchdog_backoff * 2, WATCHDOG_BACKOFF_MAX
                             )
+                        else:
+                            logger.debug(
+                                "Watchdog: still stopped, %.1fs / %.0fs elapsed "
+                                "(bank=%d station=%d)",
+                                now - watchdog_stop_since,
+                                watchdog_backoff,
+                                playing_bank,
+                                playing_station,
+                            )
                     else:
                         # MPD is playing/paused — reset watchdog state
                         if watchdog_stop_since != 0.0:
-                            logger.info("Watchdog: playback resumed, resetting")
+                            logger.info(
+                                "Watchdog: playback resumed (state=%r), resetting "
+                                "(bank=%d station=%d)",
+                                mpd_state,
+                                playing_bank,
+                                playing_station,
+                            )
                         watchdog_stop_since = 0.0
                         watchdog_backoff = WATCHDOG_GRACE_SEC
+                else:
+                    # Station is not a stream type — watchdog intentionally inactive.
+                    # Log periodically so it's clear the watchdog is running but skipping.
+                    if now - watchdog_last_skip_log >= 60.0:
+                        watchdog_last_skip_log = now
+                        logger.info(
+                            "Watchdog: inactive for bank=%d station=%d "
+                            "(type=%r is not a stream type — only %s are watched)",
+                            playing_bank,
+                            playing_station,
+                            stype,
+                            ", ".join(sorted(_STREAM_TYPES)),
+                        )
 
             # Sleep until next poll
             time.sleep(poll_interval)
