@@ -181,6 +181,10 @@ class CommandHandler(BaseHTTPRequestHandler):
             self._get_version()
             return
 
+        if self.path == "/admin/debug":
+            self._get_debug_info()
+            return
+
         if self.path.startswith("/") and self.path.count("/") == 1 and not self.path.endswith("/"):
             self._send_static_file(self.path[1:])
             return
@@ -952,6 +956,65 @@ class CommandHandler(BaseHTTPRequestHandler):
                 self.send_json_response(200, {"success": True, "version": "(git info unavailable)"})
         except (subprocess.TimeoutExpired, FileNotFoundError):
             self.send_json_response(200, {"success": True, "version": "(git info unavailable)"})
+
+    def _get_debug_info(self):
+        """Return diagnostic snapshot: MPD status, state file, station type, rotary log tail."""
+        info: dict[str, Any] = {"success": True}
+
+        # MPD status via mpc
+        try:
+            mpc_status = self._run_local(["mpc", "status"], timeout=5)
+            mpc_current = self._run_local(["mpc", "current"], timeout=5)
+            info["mpd_status_raw"] = mpc_status.stdout.strip() if mpc_status.returncode == 0 else mpc_status.stderr.strip()
+            info["mpd_current"] = mpc_current.stdout.strip() if mpc_current.returncode == 0 else ""
+            info["mpd_is_playing"] = "[playing]" in (mpc_status.stdout or "")
+            info["mpd_is_stopped"] = "[playing]" not in (mpc_status.stdout or "") and "[paused]" not in (mpc_status.stdout or "")
+        except Exception as exc:
+            info["mpd_error"] = str(exc)
+
+        # State file
+        try:
+            state_text = Path(STATE_FILE).read_text(encoding="utf-8")
+            parsed: dict[str, str] = {}
+            for line in state_text.splitlines():
+                if "=" in line:
+                    k, v = line.split("=", 1)
+                    parsed[k.strip()] = v.strip()
+            info["state_file"] = parsed
+        except Exception as exc:
+            info["state_file_error"] = str(exc)
+
+        # Station type lookup from stations.yaml (for watchdog relevance)
+        try:
+            state_parsed = info.get("state_file", {})
+            bank = int(state_parsed.get("current_bank", "-1"))
+            station = int(state_parsed.get("current_station", "-1"))
+            stations_data = yaml.safe_load(Path(str(STATIONS_FILE)).read_text(encoding="utf-8")) or {}
+            banks = stations_data.get("banks", {})
+            bank_entry = banks.get(bank, {}) if isinstance(banks, dict) else {}
+            station_entry = (bank_entry.get("stations", {}) or {}).get(station, {}) if isinstance(bank_entry, dict) else {}
+            stype = (station_entry.get("type") or "").strip() if isinstance(station_entry, dict) else ""
+            info["current_station_type"] = stype
+            info["watchdog_active"] = stype == "stream"
+            info["watchdog_note"] = (
+                "Watchdog IS active: will auto-restart if MPD stops" if stype == "stream"
+                else f"Watchdog INACTIVE: station type is {stype!r}, not 'stream'"
+            )
+        except Exception as exc:
+            info["station_type_error"] = str(exc)
+
+        # Tail of rotary-controller log
+        rotary_log = Path("/home/radio/logs/rotary.log")
+        try:
+            if rotary_log.exists():
+                lines = rotary_log.read_text(encoding="utf-8", errors="replace").splitlines()
+                info["rotary_log_tail"] = "\n".join(lines[-50:])
+            else:
+                info["rotary_log_tail"] = f"(log file not found: {rotary_log})"
+        except Exception as exc:
+            info["rotary_log_error"] = str(exc)
+
+        self.send_json_response(200, info)
 
     def _do_reboot(self):
         try:
